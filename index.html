@@ -371,7 +371,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29n';
+const BUILD_ID = '2026-07-29o';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -432,6 +432,15 @@ function processSection3(rows, section1Time) {
   const dateCol = (rows.length > 0 && rows[0]) ? (
     Object.keys(rows[0]).find(k => /日期|时间/.test(k)) || '日期'
   ) : '日期';
+  // 调试信息存到全局，供页面显示
+  window.__fs_debug = {
+    sec1Time_raw: JSON.stringify(section1Time),
+    sec1Time_norm: JSON.stringify(target),
+    totalRows: rows.length,
+    dateCol: dateCol,
+    headers: rows.length > 0 ? Object.keys(rows[0]) : [],
+    sampleDates: rows.slice(0, 3).map(r => ({ raw: r[dateCol], norm: normDateStr(r[dateCol]) }))
+  };
   const out = [];
   let skipped = 0;
   for (const r of rows) {
@@ -439,6 +448,8 @@ function processSection3(rows, section1Time) {
     if (target && d !== target) { skipped++; continue; }
     out.push({ 'SPU': toNum(r['SPU ID']), '花费': r['花费'] ?? '', '核心位置点击量': r['核心位置点击量'] ?? '' });
   }
+  window.__fs_debug.kept = out.length;
+  window.__fs_debug.skipped = skipped;
   return { columns: ['SPU', '花费', '核心位置点击量'], rows: out };
 }
 function mergeSpendInto(main, detailRows, fromCol, toCol) {
@@ -1594,6 +1605,31 @@ function renderAggResult(rep, scopeLabel) {
   const card = document.getElementById('aggResultCard');
   card.style.display = '';
   document.getElementById('aggResultTitle').textContent = scopeLabel || '综合费率报表';
+
+  // 显示全站调试信息（确认新代码是否加载）
+  let fsDebugHtml = '';
+  if (window.__fs_debug) {
+    const d = window.__fs_debug;
+    fsDebugHtml = '<div style="background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:8px 12px;margin-bottom:8px;font-size:12px;border-radius:4px;line-height:1.8">'
+      + '<b>🔍 全站调试信息：</b>'
+      + '板块一时间(原始): ' + d.sec1Time_raw
+      + ' → 标准化: <b>' + d.sec1Time_norm + '</b> | '
+      + '检测到日期列名: <b>' + d.dateCol + '</b> | '
+      + '总行数: ' + d.totalRows
+      + ' | 保留: <b style="color:' + (d.kept > 0 ? 'green' : 'red') + '">' + (d.kept || 0) + '</b>'
+      + ' | 过滤: ' + (d.skipped || 0)
+      + (d.sampleDates && d.sampleDates.length ? ' | 前3行日期原始值: ' + JSON.stringify(d.sampleDates.map(s => s.raw)) : '')
+      + '</div>';
+  } else {
+    fsDebugHtml = '<div style="background:#f8d7da;border:1px solid #dc3545;color:#721c24;padding:8px 12px;margin-bottom:8px;font-size:12px;border-radius:4px">'
+      + '<b>⚠️ 未检测到全站调试信息 — 可能浏览器仍在使用旧版缓存代码！</b> 请按 Ctrl+Shift+R 硬刷新。</div>';
+  }
+  const existingDebug = document.getElementById('fsDebugInfo');
+  if (existingDebug) existingDebug.remove();
+  const debugDiv = document.createElement('div');
+  debugDiv.id = 'fsDebugInfo';
+  debugDiv.innerHTML = fsDebugHtml;
+  wrap.parentNode.insertBefore(debugDiv, wrap);
 
   // 用全局状态渲染到 aggTableWrap
   cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
