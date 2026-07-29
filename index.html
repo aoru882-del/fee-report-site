@@ -357,7 +357,7 @@
 <script src="xlsx.full.min.js"></script>
 <script>
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29h';
+const BUILD_ID = '2026-07-29i';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -1236,17 +1236,20 @@ function loadDayReport(d) {
   showToast('已加载「' + d.date + '」当日报表');
 }
 function aggregateReports(sel) {
+  // 构建日期范围文本，用于"时间"列显示
+  const dates = sel.map(d => d.date).sort();
+  const dateRangeText = dates.length <= 1 ? (dates[0] || '') : (dates[0] + '至' + dates[dates.length - 1]);
+
   const map = new Map(); let emptyIdx = 0;
   for (const d of sel) {
     for (const r of d.report.rows) {
       const sk = normKey(r['SPU']);
       const key = sk ? sk : ('__EMPTY__' + (emptyIdx++));
-      if (!map.has(key)) map.set(key, { '时间': '', 'SPU': r['SPU'] ?? '', '商品编码': r['商品编码'] ?? '', '二级类目': r['二级类目'] ?? '', '三级类目': r['三级类目'] ?? '', '成交金额': 0, '非全站': 0, '全站': 0, '推广合计': 0, '综合费率': '' });
+      if (!map.has(key)) map.set(key, { '时间': dateRangeText, 'SPU': r['SPU'] ?? '', '商品编码': r['商品编码'] ?? '', '二级类目': r['二级类目'] ?? '', '三级类目': r['三级类目'] ?? '', '成交金额': 0, '非全站': 0, '全站': 0, '推广合计': 0, '综合费率': '' });
       const a = map.get(key);
       a['成交金额'] += Number(r['成交金额']) || 0;
       a['非全站'] += Number(r['非全站']) || 0;
       a['全站'] += Number(r['全站']) || 0;
-      a['推广合计'] += Number(r['推广合计']) || 0;
     }
   }
   const outRows = []; let sumDeal = 0, sumPromo = 0;
@@ -1254,7 +1257,8 @@ function aggregateReports(sel) {
     const deal = Math.round(a['成交金额'] * 100) / 100;
     const non = Math.round(a['非全站'] * 100) / 100;
     const all = Math.round(a['全站'] * 100) / 100;
-    const promo = Math.round((a['非全站'] + a['全站']) * 100) / 100;
+    // 推广合计 = 非全站+全站（重算，不累加单天四舍五入后的值）
+    const promo = Math.round((non + all) * 100) / 100;
     sumDeal += deal; sumPromo += promo;
     a['成交金额'] = deal; a['非全站'] = non; a['全站'] = all; a['推广合计'] = promo;
     a['综合费率'] = (deal > 0 && promo > 0) ? round4(promo / deal) : '';
@@ -1262,7 +1266,7 @@ function aggregateReports(sel) {
   }
   const tDeal = Math.round(sumDeal * 100) / 100;
   const tPromo = Math.round(sumPromo * 100) / 100;
-  const totals = { '时间': '', 'SPU': '合计', '商品编码': '', '二级类目': '', '三级类目': '', '成交金额': tDeal, '非全站': '', '全站': '', '推广合计': tPromo, '综合费率': (tDeal > 0 ? round4(tPromo / tDeal) : '') };
+  const totals = { '时间': dateRangeText, 'SPU': '合计', '商品编码': '', '二级类目': '', '三级类目': '', '成交金额': tDeal, '非全站': '', '全站': '', '推广合计': tPromo, '综合费率': (tDeal > 0 ? round4(tPromo / tDeal) : '') };
   const dailySummary = sel.map(d => { let deal = 0, promo = 0; for (const r of d.report.rows) { deal += Number(r['成交金额']) || 0; promo += Number(r['推广合计']) || 0; } return { '日期': d.date, 'SPU数': d.report.rows.length, '成交金额': round2(deal), '推广合计': round2(promo), '综合费率': deal > 0 ? round4(promo / deal) : '' }; });
   const formulas = [
     { col: '成交金额', formula: '=SUM(各日成交金额·按SPU)', desc: '多日综合：先按 SPU 把所选各天的成交金额分别相加' },
@@ -1270,8 +1274,7 @@ function aggregateReports(sel) {
     { col: '综合费率', formula: '=推广合计合计/成交金额合计', desc: '综合费率 = 推广合计合计 ÷ 成交金额合计' }
   ];
   const sectionDetails = [{ id: 'daily', name: '每日汇总（' + sel.length + ' 天）', rule: '所选日期范围内每天的总成交金额、总推广合计与综合费率（综合费率 = 当天推广合计合计 ÷ 当天成交金额合计）。', columns: ['日期', 'SPU数', '成交金额', '推广合计', '综合费率'], rows: dailySummary, rowCount: dailySummary.length }];
-  const dates = sel.map(d => d.date);
-  const scopeLabel = '多日综合（' + dates[0] + (dates.length > 1 ? (' ~ ' + dates[dates.length - 1]) : '') + ' · ' + dates.length + ' 天）';
+  const scopeLabel = '多日综合（' + dateRangeText + ' · ' + dates.length + ' 天）';
   return { columns: SECTION1_ORDER, rows: outRows, percentColumns: ['综合费率'], totals, formulas, sectionDetails, scopeLabel };
 }
 async function generateAggregate() {
