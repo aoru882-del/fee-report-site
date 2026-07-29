@@ -357,7 +357,7 @@
 <script src="xlsx.full.min.js"></script>
 <script>
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29j';
+const BUILD_ID = '2026-07-29k';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -367,19 +367,34 @@ function normKey(v) {
 }
 function normDateStr(v) {
   if (v == null || v === '') return '';
-  const s = String(v).trim();
-  // 提取所有数字段
-  const nums = s.match(/\d+/g);
-  if (!nums || !nums.length) return '';
-  // 常见格式匹配: YYYY-MM-DD / YYYY/M/D / YYYY.M.D / YYYY年M月D日 等
-  if (nums.length >= 3 && String(nums[0]).length >= 4) {
-    const y = nums[0];
-    // 补齐月份和日期到两位（处理 7→07 这种情况）
-    const m = String(nums[1]).padStart(2, '0');
-    const d = String(nums[2]).padStart(2, '0');
-    return y + m + d;
+  // 如果是 Date 对象，直接格式化
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return String(y) + m + d;
   }
-  // 兜底：直接拼接所有数字（兼容旧逻辑）
+  const s = String(v).trim();
+  // Excel 日期序列号（如 45923 = 2025-09-01），范围约 29000~60000
+  const n = Number(s);
+  if (!isNaN(n) && n > 25000 && n < 70000) {
+    // Excel 序列号转日期（Excel 以 1899-12-30 为基准）
+    const epoch = new Date(1899, 11, 30);
+    const dt = new Date(epoch.getTime() + Math.round(n) * 86400000);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return String(y) + m + d;
+  }
+  // 提取所有数字段，处理 YYYY-M-D / YYYY/M/D 等格式
+  const nums = s.match(/\d+/g);
+  if (nums && nums.length >= 3 && String(nums[0]).length >= 4) {
+    const y = nums[0];
+    const mm = String(nums[1]).padStart(2, '0');
+    const dd = String(nums[2]).padStart(2, '0');
+    return y + mm + dd;
+  }
+  // 兜底：直接拼接所有数字
   return s.replace(/[^0-9]/g, '');
 }
 function isEmpty(v) { return v === '' || v === null || v === undefined; }
@@ -984,8 +999,23 @@ document.addEventListener('click', (e) => { const pop = document.getElementById(
 function maxTableHeight() { return Math.max(160, window.innerHeight - 160); }
 function applySavedHeight() { const h = parseInt(localStorage.getItem('r2_tableHeight') || '0', 10); const sc = document.querySelector('.tbl-scroll'); if (!sc) return; if (h && h <= maxTableHeight()) sc.style.maxHeight = h + 'px'; }
 const hr = document.getElementById('heightResizer');
+const hrAgg = document.getElementById('aggHeightResizer');
 let hState = null;
-if (hr) hr.addEventListener('mousedown', (e) => { const sc = document.querySelector('.tbl-scroll'); if (!sc) return; hState = { startY: e.clientY, startH: sc.getBoundingClientRect().height }; document.addEventListener('mousemove', onHMove); document.addEventListener('mouseup', onHUp); e.preventDefault(); });
+function bindHeightResize(el) {
+  if (!el) return;
+  el.addEventListener('mousedown', (e) => {
+    // 找到当前可见的 .tbl-scroll（优先找同视图内的）
+    let sc = el.closest('.card') ? el.closest('.card').querySelector('.tbl-scroll') : null;
+    if (!sc) sc = document.querySelector('.tbl-scroll');
+    if (!sc) return;
+    hState = { startY: e.clientY, startH: sc.getBoundingClientRect().height };
+    document.addEventListener('mousemove', onHMove);
+    document.addEventListener('mouseup', onHUp);
+    e.preventDefault();
+  });
+}
+if (hr) bindHeightResize(hr);
+if (hrAgg) bindHeightResize(hrAgg);
 function onHMove(e) { if (!hState) return; const sc = document.querySelector('.tbl-scroll'); let nh = hState.startH + (e.clientY - hState.startY); nh = Math.max(120, Math.min(nh, maxTableHeight())); sc.style.maxHeight = nh + 'px'; }
 function onHUp() { if (hState) { const sc = document.querySelector('.tbl-scroll'); localStorage.setItem('r2_tableHeight', parseInt(sc.style.maxHeight, 10)); } hState = null; document.removeEventListener('mousemove', onHMove); document.removeEventListener('mouseup', onHUp); }
 window.addEventListener('resize', () => { const sc = document.querySelector('.tbl-scroll'); if (sc) { let h = parseInt(sc.style.maxHeight, 10) || 0; if (h > maxTableHeight()) { sc.style.maxHeight = maxTableHeight() + 'px'; localStorage.setItem('r2_tableHeight', maxTableHeight()); } } });
@@ -1527,8 +1557,8 @@ async function computeReportFromRawRecord(rec) {
 
   const sections = [];
   const bufA = await readFileAsArrayBuffer(fA);
-  const wbA = XLSX.read(new Uint8Array(bufA), { type: 'array' });
-  sections.push({ id: 'section_a', transform: 'section1', rows: XLSX.utils.sheet_to_json(wbA.Sheets[wbA.SheetNames[0]], { defval: '' }) });
+  const wbA = XLSX.read(new Uint8Array(bufA), { type: 'array', cellDates: true });
+  sections.push({ id: 'section_a', transform: 'section1', rows: XLSX.utils.sheet_to_json(wbA.Sheets[wbA.SheetNames[0]], { defval: '', dateNF: 'yyyy-mm-dd' }) });
   if (fB) { const tB = await readFileAsText(fB); sections.push({ id: 'section_b', rows: ReportCalc.parseCsv(tB, 1) }); }
   if (fC) { const tC = await readFileAsText(fC); sections.push({ id: 'section_c', rows: ReportCalc.parseCsv(tC, 0) }); }
 
