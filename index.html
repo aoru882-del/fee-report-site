@@ -371,7 +371,21 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29o';
+const BUILD_ID = '2026-07-29p';
+
+// 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
+(function checkCacheVersion() {
+  try {
+    const u = new URL(location.href);
+    const v = u.searchParams.get('v');
+    if (v && v !== BUILD_ID) {
+      const bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:8px 12px;font-size:13px;text-align:center;font-weight:600';
+      bar.textContent = '⚠️ 当前代码可能不是最新版（链接版本 ' + v + ' ≠ 实际 ' + BUILD_ID + '）。请按 Ctrl+Shift+R 硬刷新，或关闭标签页重新打开最新链接。';
+      document.body.appendChild(bar);
+    }
+  } catch (e) {}
+})();
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
