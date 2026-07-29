@@ -371,7 +371,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29p';
+const BUILD_ID = '2026-07-29q';
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -386,6 +386,20 @@ const BUILD_ID = '2026-07-29p';
     }
   } catch (e) {}
 })();
+
+// ===================== 全局错误捕获（让静默失败可见，便于定位） =====================
+function showFatal(msg) {
+  let bar = document.getElementById('fatalBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'fatalBar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 14px;font-size:13px;line-height:1.6;max-height:45vh;overflow:auto;white-space:pre-wrap;box-shadow:0 -2px 8px rgba(0,0,0,.3)';
+    document.body.appendChild(bar);
+  }
+  bar.textContent = (bar.textContent ? bar.textContent + '\n' : '') + msg;
+}
+window.addEventListener('error', function (e) { showFatal('脚本错误：' + (e.message || '') + (e.lineno ? (' (行 ' + e.lineno + ')') : '')); });
+window.addEventListener('unhandledrejection', function (e) { var r = e.reason; showFatal('异步错误：' + (r && r.message ? r.message : String(r))); });
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -614,7 +628,7 @@ function fmt(v, col) {
   return String(v);
 }
 function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
-function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
+function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 
 // ===================== 分享链接（压缩内嵌 #d=） =====================
 function bytesToB64url(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -1080,6 +1094,7 @@ function renderInfo(rep, createdAt, label) {
 }
 
 // ===================== 导航切换 =====================
+try {
 document.querySelectorAll('nav a').forEach(a => { a.onclick = () => { const v = a.getAttribute('data-view'); document.querySelectorAll('nav a').forEach(x => x.classList.remove('active')); a.classList.add('active'); document.querySelectorAll('.view').forEach(x => x.classList.remove('active')); document.getElementById('view' + v.charAt(0).toUpperCase() + v.slice(1)).classList.add('active'); if (v === 'history') renderHistory(); if (v === 'days') renderDays(); }; });
 document.querySelectorAll('.card-toggle').forEach(a => { a.onclick = () => { const card = document.getElementById(a.getAttribute('data-target')); const body = card.querySelector('.collapse-body'); const hidden = body.style.display === 'none'; body.style.display = hidden ? '' : 'none'; a.textContent = hidden ? '收起 ▲' : '展开 ▼'; }; });
 // rcToggle/rcBody 已随重构移除（上传区不再有折叠面板）
@@ -1091,6 +1106,7 @@ document.getElementById('btnSelAll').onclick = () => { document.querySelectorAll
 document.getElementById('btnSelNone').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]').forEach(c => c.checked = false); updateDaySelCount(); };
 document.getElementById('btnExportDay').onclick = exportExcel;
 document.getElementById('btnShareDay').onclick = shareCurrent;
+} catch (e) { showFatal('按钮绑定失败：' + e.message); }
 
 // ===================== 上传文件选择 =====================
 function onPickFile(key, input) {
