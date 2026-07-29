@@ -371,7 +371,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29l';
+const BUILD_ID = '2026-07-29m';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -428,12 +428,19 @@ function processSection2(rows) {
 }
 function processSection3(rows, section1Time) {
   const target = normDateStr(section1Time);
+  console.log('[全站调试] 板块一时间(原始):', JSON.stringify(section1Time), '→ 标准化后(target):', JSON.stringify(target));
+  console.log('[全站调试] 全站CSV总行数:', rows.length);
+  if (rows.length > 0) console.log('[全站调试] 全站CSV表头:', Object.keys(rows[0]).join(', '));
+  if (rows.length > 0) console.log('[全站调试] 前3行日期列原始值:', rows.slice(0, 3).map(r => JSON.stringify(r['日期'])));
   const out = [];
+  let skipped = 0;
   for (const r of rows) {
     const d = normDateStr(r['日期']);
-    if (target && d !== target) continue;
+    if (target && d !== target) { skipped++; continue; }
     out.push({ 'SPU': toNum(r['SPU ID']), '花费': r['花费'] ?? '', '核心位置点击量': r['核心位置点击量'] ?? '' });
   }
+  console.log('[全站调试] 日期匹配保留:', out.length, '行, 被过滤掉:', skipped, '行');
+  if (out.length > 0) console.log('[全站调试] 保留的前3行SPU+花费:', out.slice(0, 3).map(r => ({spu:r['SPU'], cost:r['花费']})));
   return { columns: ['SPU', '花费', '核心位置点击量'], rows: out };
 }
 function mergeSpendInto(main, detailRows, fromCol, toCol) {
@@ -442,11 +449,20 @@ function mergeSpendInto(main, detailRows, fromCol, toCol) {
     const k = normKey(row['SPU'] !== undefined ? row['SPU'] : row['SPU ID']);
     if (k) map[k] = row[fromCol];
   }
+  console.log('[SPU匹配调试] 合并到「' + toCol + '」: detail行数=', detailRows.length, '去重后SPU数=', Object.keys(map).length);
+  if (Object.keys(map).length > 0) {
+    const sampleKeys = Object.keys(map).slice(0, 5);
+    console.log('[SPU匹配调试] detail前5个SPU及花费:', sampleKeys.map(k => ({spu:k, val:map[k]})));
+  }
   let matched = 0;
+  const mainSample = [];
   for (const m of main.rows) {
     const k = normKey(m['SPU']);
     if (k && map[k] !== undefined && map[k] !== '') { m[toCol] = map[k]; matched++; }
+    else if (mainSample.length < 5) mainSample.push({spu:m['SPU'], found:(k && map[k] !== undefined)});
   }
+  console.log('[SPU匹配调试] 主表总行数:', main.rows.length, '匹配成功:', matched, '行');
+  if (mainSample.length > 0) console.log('[SPU匹配调试] 主表前5个SPU匹配情况:', mainSample);
   return matched;
 }
 function round2(v) { return Math.round(v * 100) / 100; }
