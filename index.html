@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>综合费率报表中心 2.0</title>
+<style>
+  :root { --bg:#f5f7fa; --card:#fff; --line:#e3e8ef; --text:#1f2937; --muted:#6b7280; --brand:#185fa5; --green:#0f6e56; --sidebar:#fff; --sidebar-active:#eef6ff; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; margin:0; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); }
+  .main { display:flex; flex-direction:column; min-height:100vh; }
+  header { background:var(--brand); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  header h1 { font-size:18px; margin:0; font-weight:500; }
+  .wrap { flex:1; padding:20px; overflow:auto; }
+  .bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  button { background:var(--brand); color:#fff; border:none; padding:9px 16px; border-radius:8px; cursor:pointer; font-size:14px; }
+  button:hover { opacity:.9; }
+  button:disabled { opacity:.5; cursor:default; }
+  select, input[type=text] { padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+  .meta { color:var(--muted); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; overflow:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; white-space:nowrap; }
+  .tbl-scroll { max-height:min(62vh, calc(100vh - 160px)); overflow:auto; border:1px solid var(--line); border-radius:10px; }
+  .tbl-scroll table { min-width:100%; }
+  .report-table { table-layout:fixed; width:auto; min-width:100%; }
+  .report-table thead th { background:#e4171b; color:#fff; position:sticky; top:0; z-index:3; overflow:hidden; text-overflow:ellipsis; }
+  .report-table th .filterBtn { color:#fff; font-size:14px; padding:2px 6px; margin-left:2px; display:inline-block; min-width:22px; text-align:center; border-radius:4px; transition:background .15s; cursor:pointer; user-select:none; }
+  .report-table th .filterBtn:hover { background:rgba(255,255,255,0.25); }
+  .report-table th .resize-handle { position:absolute; right:0; top:0; bottom:0; width:6px; cursor:col-resize; z-index:4; background:rgba(255,255,255,0.2); }
+  .report-table th .resize-handle:hover { background:rgba(255,255,255,0.55); }
+  .report-table.resizing th .resize-handle { pointer-events:none; }
+  .report-table.resizing { cursor:col-resize; user-select:none; }
+  .height-resizer { height:10px; margin-top:4px; background:linear-gradient(90deg, transparent 30%, #d1d5db 30%, #d1d5db 70%, transparent 70%); background-size:20px 4px; background-repeat:repeat-x; background-position:center; cursor:row-resize; border-radius:5px; }
+  .height-resizer:hover { background-color:#eef2f7; }
+  .align-btns { display:flex; gap:6px; margin-bottom:8px; }
+  .align-btns button { flex:1; padding:6px 0; font-size:12px; }
+  .align-btns button.active { background:#145a8d; color:#fff; }
+  .bar .align-btns { margin-bottom:0; }
+  .bar .align-btns button { flex:unset; padding:4px 10px; font-size:12px; background:var(--brand); color:#fff; }
+  .bar .align-btns button:hover { opacity:.9; }
+  tfoot td { background:#f3f6fa; font-weight:600; border-top:2px solid var(--line); }
+  .note { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:16px; line-height:1.6; }
+  .note b { color:#7c2d12; }
+  .pill { display:inline-block; background:rgba(255,255,255,.2); border-radius:999px; padding:2px 10px; font-size:12px; }
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--green); color:#fff; padding:10px 18px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:50; }
+  .toast.show { opacity:1; }
+  code.fm { background:#eef2f7; padding:2px 8px; border-radius:6px; font-size:13px; }
+  #filterPop { position:fixed; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 0 0 8px #cbd5e1, 0 8px 28px rgba(0,0,0,.15); padding:12px; width:280px; z-index:60; display:none; font-size:13px; }
+  #filterPop .ftitle { font-weight:600; margin-bottom:8px; }
+  #filterPop input[type=text] { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:7px; font-size:13px; margin-bottom:8px; }
+  #filterPop .vals { max-height:350px; overflow:auto; border:1px solid var(--line); border-radius:7px; padding:6px; margin-bottom:8px; }
+  #filterPop .vals label { display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; }
+  #filterPop .acts { display:flex; gap:6px; flex-wrap:wrap; }
+  #filterPop .acts button { padding:6px 10px; font-size:12px; }
+  .footer { text-align:center; color:var(--muted); font-size:12px; padding:16px; border-top:1px solid var(--line); margin-top:8px; }
+  .btnGhost { background:#eef2f7; color:#1f2937; }
+  .sec-detail table { font-size:12px; }
+  .sec-detail th { background:#f0f4f8; position:static; }
+  .card-toggle { color:var(--brand); font-size:12px; cursor:pointer; }
+  .collapse-body { max-height:260px; overflow:auto; }
+  .share-banner { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:10px 16px; border-radius:10px; font-size:13px; margin-bottom:16px; line-height:1.6; }
+  .share-banner a { color:#1e40af; font-weight:600; margin-left:6px; }
+  #btnShare { background:var(--green); }
+  /* 导航 */
+  nav { display:flex; gap:8px; flex-wrap:wrap; padding:10px 20px; background:#fff; border-bottom:1px solid var(--line); }
+  nav a { padding:6px 14px; border-radius:8px; color:var(--brand); text-decoration:none; cursor:pointer; font-size:14px; }
+  nav a.active { background:var(--brand); color:#fff; }
+  /* 上传源文件区域 */
+  .upload-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:14px; }
+  .upload-item { position:relative; border:2px dashed #d1d5db; border-radius:12px; padding:16px 14px; background:#f9fafb; cursor:pointer; transition:all .2s ease; }
+  .upload-item:hover { border-color:#93c5fd; background:#f8fbff; }
+  .upload-item.ready { border-style:solid; border-color:var(--brand); background:#eff6ff; }
+  .upload-title { font-size:14px; font-weight:600; color:#1f2937; margin-bottom:4px; }
+  .upload-hint { font-size:12px; color:var(--muted); margin-bottom:12px; }
+  .upload-item input[type=file] { position:absolute; opacity:0; width:0; height:0; }
+  .upload-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--brand); font-size:13px; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:all .15s; }
+  .upload-item:hover .upload-btn { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .file-name { display:none; margin-top:10px; align-items:center; gap:6px; font-size:13px; color:#065f46; font-weight:500; }
+  .file-name svg { width:16px; height:16px; color:#0f6e56; flex-shrink:0; }
+  .upload-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  #btnCalc { background:var(--brand); color:#fff; padding:10px 22px; font-weight:500; }
+  #btnRestore { background:#eef2f7; color:#374151; }
+  #btnRestore:hover { background:#e3e8ef; }
+  #rcStatus { margin-top:10px; min-height:20px; }
+  /* 我的报表列表 */
+  .snap-item { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; margin-bottom:10px; background:#fff; }
+  .snap-item .snap-info { flex:1; min-width:0; }
+  .snap-item .snap-name { font-weight:600; font-size:14px; }
+  .snap-item .snap-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .snap-item .snap-btns { display:flex; gap:8px; flex-shrink:0; }
+  .snap-empty { color:var(--muted); font-size:13px; padding:20px; text-align:center; }
+  .view { display:none; }
+  .view.active { display:block; }
+  .badge { display:inline-block; background:#fee2e2; color:#b91c1c; border-radius:999px; padding:1px 8px; font-size:11px; margin-left:6px; }
+  /* 隐藏日期选择器未选时的占位符文字（yyyy/mm/日），选中后才显示 */
+  input[type="date"]::-webkit-datetime-edit { color: transparent; }
+  input[type="date"]:focus::-webkit-datetime-edit,
+  input[type="date"]:valid::-webkit-datetime-edit { color: initial; }
+
+  /* ===== 日历日期选择器 ===== */
+  .dp-wrap { position:relative; display:inline-flex; align-items:center; }
+  .dp-trigger {
+    display:inline-flex;align-items:center;gap:4px;
+    border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;
+    background:#fff;font-size:13px;color:#1f2937;cursor:pointer;
+    user-select:none;white-space:nowrap;height:32px;min-width:130px;
+    box-sizing:border-box;
+  }
+  .dp-trigger:hover { border-color:var(--brand); }
+  .dp-trigger .dp-arrow { margin-left:auto;font-size:10px;color:#9ca3af;transition:transform .2s; }
+  .dp-wrap.open .dp-arrow { transform:rotate(180deg); }
+  .dp-panel {
+    position:absolute;top:calc(100% + 4px);left:0;z-index:1000;
+    background:#fff;border:1px solid #e5e7eb;border-radius:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.15);padding:0;width:520px;display:none;
+  }
+  .dp-wrap.open .dp-panel { display:block; }
+  .dp-tabs { display:flex;gap:0;padding:10px 12px 0;border-bottom:1px solid #e5e7eb;flex-wrap:wrap; }
+  .dp-tab {
+    padding:5px 12px;font-size:13px;color:#374151;cursor:pointer;border-radius:6px 6px 0 0;
+    border:1px solid transparent;border-bottom:none;margin-bottom:-1px;background:transparent;
+  }
+  .dp-tab:hover { background:#f3f4f6; }
+  .dp-tab.active { color:var(--brand);border-color:#e5e7eb;background:#fff;font-weight:600; }
+  .dp-bodies { display:flex;gap:0;padding:12px; }
+  .dp-month { flex:1;min-width:0; }
+  .dp-mh {
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    font-size:14px;font-weight:600;color:#111827;margin-bottom:8px;
+  }
+  .dp-mh button {
+    width:22px;height:22px;border-radius:50%;border:1px solid #d1d5db;
+    background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:#374151;padding:0;
+  }
+  .dp-mh button:hover { background:#f3f4f6;border-color:var(--brand);color:var(--brand); }
+  .dp-wk { display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:#6b7280;margin-bottom:4px; }
+  .dp-wk span { padding:3px 0; }
+  .dp-days { display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center; }
+  .dp-day {
+    width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    border-radius:6px;font-size:13px;cursor:pointer;color:#374151;border:none;background:transparent;
+    padding:0;
+  }
+  .dp-day:hover:not(.dp-out):not(.dp-sel) { background:#f3f4f6; }
+  .dp-day.dp-out { color:#d1d5db;cursor:default; }
+  .dp-day.dp-sel { background:var(--brand);color:#fff;font-weight:600; }
+  .dp-day.dp-today:not(.dp-sel) { border:1px solid var(--brand);color:var(--brand);font-weight:600; }
+  .dp-day.dp-has-data::after {
+    content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+    width:4px;height:4px;border-radius:50%;background:var(--brand);
+  }
+  /* 每日数据 / 多天综合 */
+  .day-item { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; margin-bottom:10px; background:#fff; }
+  .day-item input[type=checkbox] { width:18px; height:18px; cursor:pointer; flex-shrink:0; }
+  .day-info { flex:1; min-width:0; }
+  .day-name { font-weight:600; font-size:14px; }
+  .day-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .day-btns { display:flex; gap:8px; flex-shrink:0; align-items:center; }
+  .day-empty { color:var(--muted); font-size:13px; padding:20px; text-align:center; }
+  .day-actions { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+
+  /* ===== 原始数据记录管理 ===== */
+  .rec-file-slot { padding:10px 12px;border:1.5px dashed #94a3b8;border-radius:8px;cursor:pointer;text-align:center;background:#fff;transition:border-color .15s,background .15s;min-height:42px;display:flex;align-items:center;justify-content:center }
+  .rec-file-slot:hover { border-color:var(--brand);background:#eff6ff }
+  .rec-file-slot.ready { border-style:solid;border-color:var(--green);background:#f0fdf4;justify-content:space-between;padding:8px 12px }
+  .rec-file-hint { font-size:12px;color:var(--muted) }
+  .rec-file-name { font-size:12px;color:var(--text);font-weight:500;word-break:break-all }
+  .rec-file-size { font-size:11px;color:var(--muted);margin-left:6px }
+  .raw-grid-body { display:flex;flex-direction:column }
+  .raw-grid-row { display:grid;grid-template-columns:140px 1fr 1fr 1fr 70px;gap:0;border-bottom:1px solid var(--line);align-items:center }
+  .raw-grid-row:nth-child(even) { background:#f8fafc }
+  .raw-grid-row { background:#fff }
+  .raw-grid-row:hover { background:#f1f5f9 }
+  .raw-grid-cell { padding:10px 12px;color:#1e293b;display:flex;align-items:center;gap:6px;border-left:1px solid rgba(0,0,0,.04);min-height:44px;font-size:13px }
+  .raw-grid-cell:first-child { border-left:none }
+  .raw-date-pill { display:inline-block;background:#f8fafc;border-radius:6px;padding:5px 12px;font-size:13px;font-weight:600;color:#1e293b;white-space:nowrap;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,.04) }
+  .raw-date-pill .d-date { color:var(--brand) }
+  .raw-date-pill .d-time { color:#64748b;font-weight:400;margin-left:4px }
+  .raw-file-cell { display:flex;flex-direction:row;align-items:center;gap:6px }
+  .raw-file-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0 }
+  .raw-file-dot.ok { background:var(--green) }
+  .raw-file-dot.miss { background:#cbd5e1 }
+  .raw-file-name { font-size:13px;color:#1e293b;font-weight:500 }
+  .raw-file-empty { font-size:12px;color:#94a3b8 }
+  .raw-edit-btn { padding:3px 10px;font-size:12px;background:#fff;color:var(--brand);border:1px solid var(--brand);border-radius:4px;cursor:pointer;flex-shrink:0;white-space:nowrap;font-weight:500 }
+  .raw-edit-btn:hover { background:var(--brand);color:#fff }
+  .raw-ops { display:flex;gap:6px;justify-content:center }
+  .raw-ops button { padding:5px 12px;font-size:12px;border-radius:4px;font-weight:500 }
+  .raw-ops .btnGhost { color:#dc2626;border:1px solid #dc2626 }
+</style>
+</head>
+<body>
+<div class="main">
+  <header>
+    <h1>综合费率报表中心 2.0</h1>
+    <span class="pill" id="updated"></span>
+  </header>
+  <nav>
+    <a href="javascript:void(0)" class="active" data-view="calc">上传数据原表</a>
+    <a href="javascript:void(0)" data-view="days">查看综合报表</a>
+    <a href="javascript:void(0)" data-view="mizuno">美津浓信息总表</a>
+  </nav>
+  <div class="wrap">
+    <!-- 上传数据原表视图 — 纯原始数据记录管理 -->
+    <div class="view active" id="viewCalc">
+      <div class="note">
+        <b>原始数据管理</b>：在此按日期管理每天的原表文件。每条记录包含日期和 3 个源文件（经营状况明细报表、非全站营销、全站营销），支持新增、修改和删除。<br>
+        文件保存在浏览器本地（IndexedDB），刷新不丢失。去「<b>查看综合报表</b>」选择日期后系统会自动读取这些原始文件并计算综合费率报表。
+      </div>
+      <div class="bar">
+        <button onclick="showRecordForm()" style="background:var(--green);font-weight:600">＋ 新增记录</button>
+        <span class="meta" id="rawCount" style="margin-left:auto"></span>
+      </div>
+
+      <!-- 新增 / 编辑记录表单 -->
+      <div class="card" id="recordFormCard" style="display:none;background:#f8fafc;border:2px dashed var(--brand)">
+        <div style="font-weight:600;font-size:15px;margin-bottom:14px;color:var(--brand)" id="recordFormTitle">新增数据记录</div>
+        <input type="hidden" id="editingRecordId" value="">
+        <div style="display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px 16px;align-items:end;margin-bottom:14px">
+          <div>
+            <label class="meta" style="display:block;margin-bottom:4px;font-weight:500">📅 日期 <b style="color:red">*</b></label>
+            <input type="date" id="recDate" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label class="meta" style="display:block;margin-bottom:4px;font-weight:500">① 经营状况明细报表 <b style="color:red">*</b></label>
+            <div class="rec-file-slot" id="recSlotA" onclick="document.getElementById('recSecA').click()">
+              <span class="rec-file-hint">点击选择 xlsx 文件</span>
+            </div>
+            <input type="file" id="recSecA" accept=".xlsx" style="display:none" onchange="onRecPickFile('secA',this)">
+          </div>
+          <div>
+            <label class="meta" style="display:block;margin-bottom:4px;font-weight:500">② 非全站营销 <b style="color:red">*</b></label>
+            <div class="rec-file-slot" id="recSlotC" onclick="document.getElementById('recSecC').click()">
+              <span class="rec-file-hint">点击选择 csv 文件</span>
+            </div>
+            <input type="file" id="recSecC" accept=".csv" style="display:none" onchange="onRecPickFile('secC',this)">
+          </div>
+          <div>
+            <label class="meta" style="display:block;margin-bottom:4px;font-weight:500">③ 全站营销 <b style="color:red">*</b></label>
+            <div class="rec-file-slot" id="recSlotB" onclick="document.getElementById('recSecB').click()">
+              <span class="rec-file-hint">点击选择 csv 文件</span>
+            </div>
+            <input type="file" id="recSecB" accept=".csv" style="display:none" onchange="onRecPickFile('secB',this)">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="saveRawRecord()" style="background:var(--green);font-weight:600">💾 保存记录</button>
+          <button class="btnGhost" onclick="cancelRecordForm()">取消</button>
+        </div>
+      </div>
+
+      <!-- 记录列表（Grid 布局） -->
+      <div class="card">
+        <div class="raw-grid-header" style="display:grid;grid-template-columns:140px 1fr 1fr 1fr 70px;gap:0;background:var(--brand);border-radius:8px 8px 0 0;overflow:hidden">
+          <div style="padding:8px 10px;color:#fff;font-weight:600;font-size:12px">日期</div>
+          <div style="padding:8px 10px;color:#fff;font-weight:600;font-size:12px;border-left:1px solid rgba(255,255,255,.15)">① 经营状况明细报表</div>
+          <div style="padding:8px 10px;color:#fff;font-weight:600;font-size:12px;border-left:1px solid rgba(255,255,255,.15)">② 非全站营销</div>
+          <div style="padding:8px 10px;color:#fff;font-weight:600;font-size:12px;border-left:1px solid rgba(255,255,255,.15)">③ 全站营销</div>
+          <div style="padding:8px 10px;color:#fff;font-weight:600;font-size:12px;text-align:center;border-left:1px solid rgba(255,255,255,.15)">操作</div>
+        </div>
+        <div id="rawRecordsList" class="raw-grid-body"></div>
+        <div id="rawEmptyTip" class="day-empty" style="display:none">还没有任何数据记录。点上方「＋ 新增记录」开始添加。</div>
+      </div>
+    </div>
+    <!-- 查看综合报表视图 -->
+    <div class="view" id="viewDays">
+      <div class="note">在「上传数据原表」中按日期添加每天的原表文件记录 → 在此勾选需要的时间段 → 点「生成综合报表」系统自动读取原始文件并计算综合费率。<br>算好后点右侧<b>「发布共享数据」</b>，会把计算结果打包进链接——同事打开即可查看，<b>无需上传任何文件</b>。</div>
+      <div id="sharedBanner" style="display:none;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:13px">这是别人分享的只读每日数据。勾选你关心的时间段 →「生成综合报表」即可查看对应综合费率（原始上传文件不在链接中）。</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <span class="meta" style="font-weight:500">按日期筛选：</span>
+        <div class="dp-wrap" id="dpDays">
+          <input type="hidden" id="dayFilterDate" value="">
+          <div class="dp-trigger" onclick="toggleDP('dpDays')"><span id="dpDaysLabel">全部日期</span><span class="dp-arrow">▾</span></div>
+          <div class="dp-panel" id="dpDaysPanel"></div>
+        </div>
+        <button class="btnGhost" onclick="clearDayFilter()" style="font-size:12px">清除筛选</button>
+      </div>
+      <div class="day-actions">
+        <button id="btnGenAgg" style="background:var(--brand)">生成综合报表（选中）</button>
+        <button id="btnSelAll" class="btnGhost">全选</button>
+        <button id="btnSelNone" class="btnGhost">清空选择</button>
+        <span class="meta" id="daySelCount"></span>
+        <button id="btnPublish" style="background:var(--green);margin-left:auto">发布共享数据</button>
+        <button id="btnExportDay" style="background:#0f6e56;display:none">导出 Excel</button>
+        <button id="btnShareDay" style="background:#4f46e5;display:none">复制分享链接</button>
+      </div>
+      <div class="card"><div id="dayList"></div></div>
+
+      <!-- 综合费率报表结果展示区 -->
+      <div class="card" id="aggResultCard" style="display:none;margin-top:16px">
+        <div class="meta" style="font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          <span id="aggResultTitle">综合费率报表</span>
+          <a href="javascript:void(0)" id="aggToggle" style="color:var(--brand);font-size:12px;cursor:pointer">收起 ▲</a>
+        </div>
+        <div id="aggResultBody">
+          <div id="aggSummary" class="meta"></div>
+          <div style="height:8px"></div>
+          <div id="aggTableWrap" class="tbl-scroll"></div>
+          <div class="height-resizer" id="aggHeightResizer"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 美津浓总表视图 -->
+    <div class="view" id="viewMizuno">
+      <div class="note">美津浓信息总表更新频率低，在这里<b>单独上传并持久存储</b>。上传一次后，「上传数据原表」算报表时会自动使用这份已存储的文件，无需每次重新选择。也可在此删除或替换。</div>
+      <div class="card">
+        <div style="font-weight:500;margin-bottom:12px">当前存储状态</div>
+        <div id="mizunoStatus" class="meta" style="margin-bottom:16px">加载中…</div>
+        <div class="upload-grid" style="max-width:420px">
+          <div class="upload-item" onclick="document.getElementById('fMizunoStandalone').click()">
+            <div class="upload-title">上传 / 替换美津浓信息总表</div>
+            <div class="upload-hint">xlsx 格式</div>
+            <input type="file" id="fMizunoStandalone" accept=".xlsx" onchange="onPickMizunoStandalone(this)">
+            <div class="upload-btn">选择文件</div>
+            <div class="file-name" id="mizunoNewName" style="display:none"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg><span></span></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="btnSaveMizuno" style="background:var(--brand)">保存</button>
+          <button id="btnDeleteMizuno" class="btnGhost" style="color:#dc2626;border-color:#dc2626">删除已存储文件</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div id="filterPop">
+  <div class="ftitle" id="fpTitle">筛选</div>
+  <div class="align-batch-title" style="margin-bottom:6px;font-size:12px;color:var(--muted)">单独设置本列</div>
+  <div class="align-btns" id="fpAlign">
+    <button type="button" class="btnGhost" data-align="left">左</button>
+    <button type="button" class="btnGhost" data-align="center">中</button>
+    <button type="button" class="btnGhost" data-align="right">右</button>
+  </div>
+  <input type="file" style="display:none">
+  <input type="text" id="fpText" placeholder="包含文字（不区分大小写）">
+  <div style="margin-bottom:6px">
+    <button type="button" class="btnGhost" id="fpSelToggle" style="width:100%">全选</button>
+  </div>
+  <div class="vals" id="fpVals"></div>
+  <div class="acts">
+    <button type="button" id="fpSortAsc">升序</button>
+    <button type="button" id="fpSortDesc">降序</button>
+    <button type="button" id="fpClear">清除本列</button>
+    <button type="button" id="fpApply">确定</button>
+  </div>
+</div>
+<div class="footer" id="appFooter">综合费率报表中心 2.0</div>
+
+<script src="xlsx.full.min.js"></script>
+<script>
+// ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
+const BUILD_ID = '2026-07-29h';
+
+// ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
+function normKey(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  return isNaN(n) ? String(v).trim() : String(n);
+}
+function normDateStr(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
+function isEmpty(v) { return v === '' || v === null || v === undefined; }
+function toNum(v) { if (v === '' || v === null || v === undefined) return v; const n = Number(v); return isNaN(n) ? v : n; }
+const SECTION1_ORDER = ['时间', 'SPU', '商品编码', '二级类目', '三级类目', '成交金额', '非全站', '全站', '推广合计', '综合费率'];
+function processSection1(rows) {
+  const out = [];
+  for (const r of rows) {
+    out.push({ '时间': r['时间'] ?? '', 'SPU': r['SPU'] ?? '', '商品编码': '', '二级类目': r['二级类目'] ?? '', '三级类目': r['三级类目'] ?? '', '成交金额': r['成交金额'] ?? '', '非全站': '', '全站': '', '推广合计': '', '综合费率': '' });
+  }
+  return { columns: SECTION1_ORDER, rows: out };
+}
+function processSection2(rows) {
+  const out = [];
+  for (const r of rows) { out.push({ 'SPU ID': toNum(r['SPU ID']), '点击数': r['点击数'] ?? '', '花费': r['花费'] ?? '' }); }
+  return { columns: ['SPU ID', '点击数', '花费'], rows: out };
+}
+function processSection3(rows, section1Time) {
+  const target = normDateStr(section1Time);
+  const out = [];
+  for (const r of rows) {
+    const d = normDateStr(r['日期']);
+    if (target && d !== target) continue;
+    out.push({ 'SPU': toNum(r['SPU ID']), '花费': r['花费'] ?? '', '核心位置点击量': r['核心位置点击量'] ?? '' });
+  }
+  return { columns: ['SPU', '花费', '核心位置点击量'], rows: out };
+}
+function mergeSpendInto(main, detailRows, fromCol, toCol) {
+  const map = {};
+  for (const row of detailRows) {
+    const k = normKey(row['SPU'] !== undefined ? row['SPU'] : row['SPU ID']);
+    if (k) map[k] = row[fromCol];
+  }
+  let matched = 0;
+  for (const m of main.rows) {
+    const k = normKey(m['SPU']);
+    if (k && map[k] !== undefined && map[k] !== '') { m[toCol] = map[k]; matched++; }
+  }
+  return matched;
+}
+function round2(v) { return Math.round(v * 100) / 100; }
+function round4(v) { return Math.round(v * 10000) / 10000; }
+function applySection4(main) {
+  const cols = main.columns;
+  const has = c => cols.includes(c);
+  let sumDeal = 0, sumPromo = 0;
+  for (const r of main.rows) {
+    const non = Number(r['非全站']) || 0;
+    const all = Number(r['全站']) || 0;
+    const promo = non + all;
+    if (has('推广合计')) r['推广合计'] = round2(promo);
+    const deal = Number(r['成交金额']) || 0;
+    if (has('综合费率')) r['综合费率'] = (deal > 0 && promo > 0) ? round4(promo / deal) : '';
+    if (deal > 0) sumDeal += deal;
+    sumPromo += promo;
+  }
+  const totals = { '时间': '', 'SPU': '合计', '商品编码': '', '二级类目': '', '三级类目': '', '成交金额': round2(sumDeal), '非全站': '', '全站': '', '推广合计': round2(sumPromo), '综合费率': (sumDeal > 0 ? round4(sumPromo / sumDeal) : '') };
+  const formulas = [
+    { col: '推广合计', formula: '=非全站+全站', desc: '推广合计 = 非全站花费 + 全站花费' },
+    { col: '综合费率', formula: '=推广合计/成交金额', desc: '综合费率 = 推广合计 ÷ 成交金额（以百分比显示）' },
+    { col: '成交金额(合计)', formula: '=SUBTOTAL(9,成交金额)', desc: '成交金额合计：对当前可见（筛选后）行求和，随筛选变化' },
+    { col: '推广合计(合计)', formula: '=SUBTOTAL(9,推广合计)', desc: '推广合计合计：对当前可见（筛选后）行求和' },
+    { col: '综合费率(合计)', formula: '=推广合计合计/成交金额合计', desc: '合计综合费率 = 推广合计合计 ÷ 成交金额合计' }
+  ];
+  return { formulas, totals };
+}
+function readMizunoMap(wb, sheetName) {
+  const name = sheetName && wb.Sheets[sheetName] ? sheetName : wb.SheetNames[0];
+  const ws = wb.Sheets[name];
+  if (!ws || !ws['!ref']) return { map: {}, dataRows: 0, sheet: name };
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const lIdx = XLSX.utils.decode_col('B');
+  const rIdx = XLSX.utils.decode_col('D');
+  const cellAt = (r, c) => ws[XLSX.utils.encode_cell({ r, c })];
+  const map = {}; let dataRows = 0;
+  for (let r = range.s.r + 1; r <= range.e.r; r++) {
+    const lk = cellAt(r, lIdx);
+    if (!lk || lk.v === '' || lk.v === null) continue;
+    const key = normKey(lk.v);
+    if (!key) continue;
+    if (map[key] === undefined) map[key] = cellAt(r, rIdx) ? cellAt(r, rIdx).v : '';
+    dataRows++;
+  }
+  return { map, dataRows, sheet: name };
+}
+function applyMizunoWithMap(main, map) {
+  let filled = 0, total = 0;
+  for (const row of main.rows) {
+    if (!row['SPU']) continue;
+    total++;
+    const k = normKey(row['SPU']);
+    if (map[k] !== undefined && map[k] !== '') { row['商品编码'] = map[k]; filled++; }
+  }
+  return { filled, spus: total };
+}
+function buildReportBrowser(sections, mizunoMap, opts) {
+  opts = opts || {};
+  const outKey = 'SPU';
+  const sectionDetails = [];
+  let main = null;
+  const sec1 = sections.find(s => s.transform === 'section1') || sections.find(s => s.id === 'section_a');
+  if (sec1) main = processSection1(sec1.rows);
+  const sec1Time = (sec1 && sec1.rows[0]) ? sec1.rows[0]['时间'] : '';
+  const sec2 = sections.find(s => s.id === 'section_c');
+  if (sec2) {
+    const cleaned = processSection2(sec2.rows);
+    const matched = main ? mergeSpendInto(main, cleaned.rows, '花费', '非全站') : 0;
+    sectionDetails.push({ id: 'section2', name: '板块二 · 非全站', rule: '非全站.csv：B列(SPU ID)转为数字；删除A列(日期)。剩余列：SPU ID / 点击数 / 花费。按 SPU 并入主表「非全站」列（取花费）。', columns: cleaned.columns, rows: cleaned.rows, rowCount: cleaned.rows.length, matched });
+  }
+  const sec3 = sections.find(s => s.id === 'section_b');
+  if (sec3) {
+    const cleaned = processSection3(sec3.rows, sec1Time);
+    const matched = main ? mergeSpendInto(main, cleaned.rows, '花费', '全站') : 0;
+    sectionDetails.push({ id: 'section3', name: '板块三 · 全站', rule: '全站.csv：删除第1行说明、以第2行为表头；按「日期」与板块一「时间」(周期 ' + sec1Time + ')一致的行保留，其余删除；只留 SPU/花费/核心位置点击量 三列；SPU 转数字。按 SPU 并入主表「全站」列（取花费）。', columns: cleaned.columns, rows: cleaned.rows, rowCount: cleaned.rows.length, matched });
+  }
+  let section4 = null;
+  if (main) {
+    section4 = applySection4(main);
+    sectionDetails.push({ id: 'section4', name: '板块四 · 综合费率计算', rule: '推广合计 = 非全站 + 全站；综合费率 = 推广合计 ÷ 成交金额（百分比）。', columns: ['推广合计公式', '综合费率公式'], rows: [{ '推广合计公式': '非全站 + 全站', '综合费率公式': '推广合计 / 成交金额' }], rowCount: 1 });
+  }
+  let mizunoMeta = null;
+  if (main) {
+    const r = applyMizunoWithMap(main, mizunoMap || {});
+    mizunoMeta = { enabled: true, sheet: opts.mizunoSheet || '汇总', dataRows: opts.mizunoRows || 0, filled: r.filled, spus: r.spus };
+  }
+  if (!main) main = { columns: SECTION1_ORDER, rows: [] };
+  const pendingConfig = [];
+  const pendingColumns = pendingConfig.filter(col => main.rows.every(r => isEmpty(r[col])));
+  return { columns: main.columns, rows: main.rows, percentColumns: ['综合费率'], pendingColumns, sectionDetails, formulas: section4 ? section4.formulas : [], totals: section4 ? section4.totals : null, mizunoMeta };
+}
+function parseCsv(text, skipRows) {
+  skipRows = skipRows || 0;
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.trim().split(/\r?\n/).slice(skipRows);
+  if (!lines.length) return [];
+  const split = (line) => {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === ',' && !q) { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur); return out;
+  };
+  const headers = split(lines[0]);
+  return lines.slice(1).map(l => { const cells = split(l); const o = {}; headers.forEach((h, i) => { o[h] = cells[i] ?? ''; }); return o; });
+}
+const ReportCalc = { buildReportBrowser, readMizunoMap, parseCsv, normKey, normDateStr };
+
+// ===================== 全局状态 =====================
+const __DATA__ = { createdAt: null, report: { columns: SECTION1_ORDER, rows: [], totals: null, percentColumns: ['综合费率'], mizunoMeta: null, formulas: [], sectionDetails: [] } };
+let cols = __DATA__.report.columns;
+let pct = new Set(__DATA__.report.percentColumns || []);
+const ALIGN_LABEL = { left: '左', center: '中', right: '右' };
+let rows = JSON.parse(JSON.stringify(__DATA__.report.rows));
+let totals = __DATA__.report.totals;
+let filters = {};
+let sortState = { col: null, dir: 0 };
+let colAlign = JSON.parse(localStorage.getItem('r2_colAlign') || '{}');
+let colWidths = JSON.parse(localStorage.getItem('r2_colWidths') || '{}');
+let fpCol = null;
+let viewCreatedAt = __DATA__.createdAt;
+let viewMizunoMeta = __DATA__.report.mizunoMeta || null;
+let currentScopeLabel = '';
+// 上传文件内存态（优先于 input.files，便于从 IndexedDB 恢复）
+let uploadFiles = { secA: null, secB: null, secC: null, mizuno: null };
+const FILE_KEYS = { fSecA: 'secA', fSecB: 'secB', fSecC: 'secC', fMizuno: 'mizuno' };
+
+function fmt(v, col) {
+  if (v === null || v === undefined || v === '') return '';
+  if (pct.has(col) && !isNaN(Number(v))) return (Number(v) * 100).toFixed(2) + '%';
+  return String(v);
+}
+function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
+
+// ===================== 分享链接（压缩内嵌 #d=） =====================
+function bytesToB64url(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64urlToBytes(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const bin = atob(s); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return bytes; }
+async function encodeReport(obj) { if (typeof CompressionStream === 'undefined') throw new Error('当前浏览器不支持压缩，请换用较新版本的 Chrome / Edge'); const cs = new CompressionStream('deflate-raw'); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(JSON.stringify(obj))); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return bytesToB64url(new Uint8Array(buf)); }
+async function decodeReport(b64u) { const bytes = b64urlToBytes(b64u); const ds = new DecompressionStream('deflate-raw'); const w = ds.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(ds.readable).arrayBuffer(); return JSON.parse(new TextDecoder().decode(buf)); }
+function getReportPayload() { return { columns: cols, rows: rows, totals: totals, percentColumns: Array.from(pct), mizunoMeta: viewMizunoMeta, createdAt: viewCreatedAt }; }
+async function shareCurrent() {
+  try {
+    if (!rows.length) { showToast('当前没有可分享的报表'); return; }
+    const payload = getReportPayload();
+    const b64u = await encodeReport(payload);
+    const url = location.origin + location.pathname + '#d=' + b64u;
+    history.replaceState(null, '', '#d=' + b64u);
+    let copied = false;
+    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { /* 剪贴板不可用，地址栏已更新 hash */ }
+    showToast(copied ? '分享链接已复制到剪贴板' : '链接已生成，请手动复制地址栏网址');
+  } catch (e) { showToast('生成失败：' + e.message); }
+}
+
+// 发布共享数据：从所有原始记录计算报表后打包进链接（不含原始上传文件，仅含已算好的报表结果）
+async function publishShare() {
+  const all = await idbGetAll('raw_records');
+  if (!all.length) { showToast('还没有可发布的数据记录，请先在「上传数据原表」中添加'); return; }
+  showToast('正在计算全部记录的报表…');
+  const days = [];
+  for (const rec of all) {
+    try {
+      let rep;
+      if (rec.files && rec.files.secA) rep = await computeReportFromRawRecord(rec);
+      else if (rec.legacyReport) rep = rec.legacyReport;
+      else { console.warn('跳过 ' + rec.date + '：无可用数据'); continue; }
+      days.push({ date: rec.date, createdAt: rec.createdAt, report: rep });
+    } catch (e) {
+      console.warn('跳过 ' + rec.date + ':', e.message);
+    }
+  }
+  if (!days.length) { showToast('没有成功计算的报表数据'); return; }
+  const payload = { type: 'days', days: days, publishedAt: Date.now() };
+  try {
+    const b64u = await encodeReport(payload);
+    const url = location.origin + location.pathname + '#d=' + b64u;
+    history.replaceState(null, '', '#d=' + b64u);
+    let copied = false;
+    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { /* 剪贴板不可用时地址栏已更新 */ }
+    const tip = '已发布 ' + days.length + ' 天的共享数据' + (copied ? '，链接已复制到剪贴板' : '，请复制地址栏网址') + '（同事打开即可按时间段筛选、生成综合报表，无需上传）';
+    showToast(tip);
+  } catch (e) { showToast('发布失败：' + e.message); }
+}
+
+// 把分享链接里的每日数据载入本机（覆盖同名 shared_ 条目，避免重复打开叠加）
+async function loadSharedDays(days) {
+  try {
+    const existing = await idbGetAll('raw_records');
+    for (const d of existing) { if (d.shared) await idbDelete('raw_records', d.id); }
+  } catch (e) { /* 忽略 */ }
+  for (const d of days) {
+    const id = 'shared_' + d.date + '_' + (d.createdAt || Date.now());
+    await idbPut('raw_records', id, { id: id, date: d.date, createdAt: d.createdAt || Date.now(), updatedAt: d.createdAt || Date.now(), files: null, legacyReport: d.report, shared: true });
+  }
+  const banner = document.getElementById('sharedBanner');
+  if (banner) banner.style.display = '';
+  await renderDays();
+  showToast('已加载分享的每日数据（' + days.length + ' 天），可勾选时间段生成综合报表');
+}
+
+// ===================== 美津浓总表独立管理 =====================
+let mizunoStandaloneFile = null; // 当前在独立页选中的新文件（未保存）
+
+function onPickMizunoStandalone(input) {
+  const f = input.files && input.files[0] ? input.files[0] : null;
+  mizunoStandaloneFile = f;
+  const nameBox = document.getElementById('mizunoNewName');
+  if (f) { nameBox.querySelector('span').textContent = f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)'; nameBox.style.display = 'flex'; }
+  else { nameBox.style.display = 'none'; }
+}
+
+async function saveMizunoStandalone() {
+  let f = mizunoStandaloneFile;
+  if (!f) {
+    // 如果没有新选文件，但 uploadFiles.mizuno 有（从主计算页带过来的），也允许保存
+    f = uploadFiles.mizuno;
+  }
+  if (!f) { showToast('请先选择一个文件'); return; }
+  const data = await readFileAsArrayBuffer(f);
+  const record = { name: f.name, type: f.type, size: f.size, data: data, savedAt: Date.now() };
+  await idbPut('files', 'mizuno_persist', record);
+  mizunoStandaloneFile = null;
+  document.getElementById('mizunoNewName').style.display = 'none';
+  document.getElementById('fMizunoStandalone').value = '';
+  await renderMizunoStatus();
+  await refreshMizunoRef();
+  showToast('已保存美津浓总表：' + f.name);
+}
+
+async function deleteMizunoStored() {
+  await idbDelete('files', 'mizuno_persist');
+  uploadFiles.mizuno = null;
+  await renderMizunoStatus();
+  await refreshMizunoRef();
+  showToast('已删除已存储的美津浓总表');
+}
+
+async function renderMizunoStatus() {
+  const el = document.getElementById('mizunoStatus');
+  const rec = await idbGet('files', 'mizuno_persist');
+  if (!rec) { el.innerHTML = '<span style="color:#9ca3af">尚未存储任何文件。请上传并点「保存」。</span>'; return; }
+  el.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px"><div style="font-weight:500;color:#166534">' + esc(rec.name) + '</div><div style="margin-top:4px;font-size:12px;color:#4b5563">大小：' + (rec.size / 1024).toFixed(1) + ' KB · 存储时间：' + new Date(rec.savedAt).toLocaleString('zh-CN') + '</div></div>';
+}
+
+async function refreshMizunoRef() {
+  const rec = await idbGet('files', 'mizuno_persist');
+  const hint = document.getElementById('mizunoRefHint');
+  const nameBox = document.getElementById('mizunoRefName');
+  if (rec) {
+    hint.innerHTML = 'xlsx · 可选 · <b style="color:var(--green)">已存储：' + esc(rec.name) + '</b> · 算报表时自动使用 → <a id="mzGoManage" href="javascript:void(0)" style="color:var(--brand);text-decoration:underline">去管理</a>';
+    nameBox.querySelector('span').textContent = rec.name;
+    nameBox.style.display = 'flex';
+  } else {
+    hint.innerHTML = 'xlsx · 可选（补全商品编码）· 尚未存储 → <a id="mzGoUpload" href="javascript:void(0)" style="color:var(--brand);text-decoration:underline">去上传</a>';
+    nameBox.style.display = 'none';
+  }
+  var el = document.getElementById('mzGoManage') || document.getElementById('mzGoUpload');
+  if (el) el.onclick = jumpToMizuno;
+}
+
+function jumpToMizuno() {
+  document.querySelectorAll('nav a').forEach(function(x){ x.classList.remove('active'); });
+  document.querySelector('nav a[data-view="mizuno"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(function(x){ x.classList.remove('active'); });
+  document.getElementById('viewMizuno').classList.add('active');
+  renderMizunoStatus();
+}
+
+// ===================== 日历日期选择器 =====================
+const DP_TABS = [
+  { label: '实时', fn: () => new Date() },
+  { label: '昨天', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); return d; } },
+  { label: '近7天', fn: () => { const d = new Date(); d.setDate(d.getDate() - 6); return d; } },
+  { label: '近30天', fn: () => { const d = new Date(); d.setDate(d.getDate() - 29); return d; } },
+  { label: '自定义', fn: null },
+];
+let dpState = { openId: null, selDate: null, viewYM: null }; // viewYM = [y,m] for left calendar
+
+function toggleDP(id) {
+  const wrap = document.getElementById(id);
+  if (dpState.openId && dpState.openId !== id) {
+    document.getElementById(dpState.openId).classList.remove('open');
+  }
+  wrap.classList.toggle('open');
+  dpState.openId = wrap.classList.contains('open') ? id : null;
+  if (wrap.classList.contains('open')) renderDPCalendar(id);
+}
+
+// 点击外部关闭
+document.addEventListener('click', e => {
+  if (dpState.openId && !e.target.closest('.dp-wrap')) {
+    document.getElementById(dpState.openId).classList.remove('open');
+    dpState.openId = null;
+  }
+});
+
+function renderDPCalendar(id) {
+  const panel = document.getElementById(id + 'Panel');
+  const now = new Date();
+  const ym = dpState.viewYM || [now.getFullYear(), now.getMonth()];
+  const selStr = document.getElementById(id === 'dpCalc' ? 'dayDate' : 'dayFilterDate').value;
+  // 快捷标签
+  let html = '<div class="dp-tabs">';
+  DP_TABS.forEach((t, i) => {
+    html += '<div class="dp-tab' + (i === DP_TABS.length - 1 ? ' active' : '') + '" onclick="dpClickTab(this,' + i + ',\'' + id + '\')">' + t.label + '</div>';
+  });
+  html += '</div><div class="dp-bodies">';
+  // 左月
+  html += renderDPMonth(ym[0], ym[1], selStr, id);
+  // 右月
+  let ny = ym[0], nm = ym[1] + 1;
+  if (nm > 11) { nm = 0; ny++; }
+  html += renderDPMonth(ny, nm, selStr, id);
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderDPMonth(y, m, selStr, id) {
+  const WD = ['一','二','三','四','五','六','日'];
+  const fd = new Date(y, m, 1);
+  let startWD = fd.getDay(); startWD = startWD === 0 ? 6 : startWD - 1; // 周一=0
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = fmtYMD(today);
+  let html = '<div class="dp-month"><div class="dp-mh">'
+    + '<button onclick="dpShiftMonth(-1,\'' + id + '\')">◀</button>'
+    + y + '年' + String(m + 1).padStart(2, '0') + '月'
+    + '<button onclick="dpShiftMonth(1,\'' + id + '\')">▶</button>'
+    + '</div><div class="dp-wk">' + WD.map(w => '<span>' + w + '</span>').join('') + '</div>'
+    + '<div class="dp-days">';
+  // 上月补位
+  const prevDays = new Date(y, m, 0).getDate();
+  for (let i = startWD - 1; i >= 0; i--) {
+    html += '<button class="dp-day dp-out" disabled>' + (prevDays - i) + '</button>';
+  }
+  // 本月
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = fmtYMD(new Date(y, m, d));
+    const isSel = ds === selStr;
+    const isToday = ds === todayStr;
+    html += '<button class="dp-day' + (isSel ? ' dp-sel' : '') + (isToday && !isSel ? ' dp-today' : '') + '" data-d="' + ds + '" onclick="dpPickDay(\'' + ds + '\',\'' + id + '\')" style="position:relative">' + d + '</button>';
+  }
+  // 下月补位
+  const totalCells = startWD + daysInMonth;
+  const remain = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let i = 1; i <= remain; i++) {
+    html += '<button class="dp-day dp-out" disabled>' + i + '</button>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function fmtYMD(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+function dpShiftMonth(dir, id) {
+  if (!dpState.viewYM) { const n = new Date(); dpState.viewYM = [n.getFullYear(), n.getMonth()]; }
+  dpState.viewYM[1] += dir;
+  if (dpState.viewYM[1] > 11) { dpState.viewYM[1] = 0; dpState.viewYM[0]++; }
+  if (dpState.viewYM[1] < 0) { dpState.viewYM[1] = 11; dpState.viewYM[0]--; }
+  renderDPCalendar(id);
+}
+
+function dpClickTab(el, idx, id) {
+  el.parentElement.querySelectorAll('.dp-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  if (idx < DP_TABS.length - 1 && DP_TABS[idx].fn) {
+    const d = DP_TABS[idx].fn();
+    dpPickDay(fmtYMD(d), id);
+  }
+}
+
+function dpPickDay(ds, id) {
+  const isCalc = id === 'dpCalc';
+  const hidden = document.getElementById(isCalc ? 'dayDate' : 'dayFilterDate');
+  hidden.value = ds;
+  document.getElementById(isCalc ? 'dpCalcLabel' : 'dpDaysLabel').textContent = ds;
+  // 关闭面板
+  document.getElementById(id).classList.remove('open');
+  dpState.openId = null;
+  // 刷新日历以显示选中态
+  renderDPCalendar(id);
+  // 如果是查看综合报表的筛选器，触发筛选
+  if (!isCalc) filterDaysByDate(ds);
+}
+
+function setDPValue(id, val) {
+  const isCalc = id === 'dpCalc';
+  const hidden = document.getElementById(isCalc ? 'dayDate' : 'dayFilterDate');
+  hidden.value = val || '';
+  document.getElementById(isCalc ? 'dpCalcLabel' : 'dpDaysLabel').textContent = val || (isCalc ? '请选择日期' : '全部日期');
+}
+
+// 查看综合报表：按日期筛选每日数据
+async function filterDaysByDate(ds) {
+  await renderDays();
+  // 高亮匹配日期，取消不匹配的勾选
+  const items = document.querySelectorAll('#dayList .day-item');
+  items.forEach(item => {
+    const cb = item.querySelector('input[type=checkbox]');
+    const dateEl = item.querySelector('.day-name');
+    if (dateEl && dateEl.textContent.trim() !== ds) {
+      if (cb) cb.checked = false;
+      item.style.opacity = '0.35';
+    } else {
+      item.style.opacity = '';
+    }
+  });
+  updateDaySelCount();
+}
+
+function clearDayFilter() {
+  setDPValue('dpDays', '');
+  renderDays();
+}
+
+// ===================== 渲染 =====================
+function render() {
+  const table = document.getElementById('reportTable');
+  if (table) table.remove();
+  const tbl = document.createElement('table');
+  tbl.className = 'report-table'; tbl.id = 'reportTable';
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  cols.forEach(col => {
+    const th = document.createElement('th');
+    th.setAttribute('data-col', col);
+    const align = colAlign[col];
+    if (align) th.style.textAlign = align;
+    const w = colWidths[col]; if (w) th.style.width = w + 'px';
+    th.innerHTML = '<span class="th-text">' + esc(col) + '</span><span class="filterBtn" title="筛选/排序/对齐">▾</span><span class="resize-handle"></span>';
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); tbl.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  const view = getViewRows();
+  view.forEach(r => {
+    const tr = document.createElement('tr');
+    cols.forEach(col => {
+      const td = document.createElement('td');
+      const align = colAlign[col]; if (align) td.style.textAlign = align;
+      td.textContent = fmt(r[col], col);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  // 合计（按当前可见行联动）
+  const tfoot = document.createElement('tfoot');
+  const ftr = document.createElement('tr');
+  let sumDeal = 0, sumPromo = 0;
+  for (const r of view) { const d = Number(r['成交金额']) || 0; if (d > 0) sumDeal += d; sumPromo += (Number(r['推广合计']) || 0); }
+  const totalDeal = Math.round(sumDeal * 100) / 100;
+  const totalPromo = Math.round(sumPromo * 100) / 100;
+  const totalRate = sumDeal > 0 ? Math.round(sumPromo / sumDeal * 10000) / 10000 : '';
+  const viewTotals = {};
+  cols.forEach(c => {
+    if (c === 'SPU') viewTotals[c] = '合计';
+    else if (c === '成交金额') viewTotals[c] = totalDeal;
+    else if (c === '推广合计') viewTotals[c] = totalPromo;
+    else if (c === '综合费率') viewTotals[c] = totalRate;
+    else viewTotals[c] = '';
+  });
+  cols.forEach(col => {
+    const td = document.createElement('td');
+    const align = colAlign[col]; if (align) td.style.textAlign = align;
+    if (col === '成交金额' || col === '推广合计' || col === '综合费率') td.style.background = '#eef6ff';
+    td.textContent = fmt(viewTotals[col], col);
+    ftr.appendChild(td);
+  });
+  tfoot.appendChild(ftr); tbl.appendChild(tfoot);
+  const summaryEl = document.getElementById('summary');
+  if (summaryEl) summaryEl.textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行，' + cols.length + ' 列') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行，' + cols.length + ' 列');
+  document.getElementById('rowCount').textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行');
+  const wrap = document.getElementById('tableWrap');
+  if (wrap) wrap.appendChild(tbl);
+  applySavedHeight();
+  setupColResize();
+  tbl.querySelectorAll('.filterBtn').forEach(btn => { btn.onclick = (e) => { e.stopPropagation(); openFilter(btn.closest('th')); }; });
+}
+function getViewRows() {
+  let view = rows.filter(r => cols.every(col => {
+    const f = filters[col]; if (!f) return true;
+    const sv = fmt(r[col], col);
+    if (f.values && f.values.size > 0) { const inSet = f.values.has(sv) || (sv === '' && f.values.has('__EMPTY__')); if (!inSet) return false; }
+    if (f.text) { if (!String(sv).toLowerCase().includes(f.text.toLowerCase())) return false; }
+    return true;
+  }));
+  if (sortState.col && sortState.dir) {
+    const c = sortState.col, dir = sortState.dir;
+    view = view.slice().sort((a, b) => { let va = a[c], vb = b[c]; const na = parseFloat(va), nb = parseFloat(vb); if (!isNaN(na) && !isNaN(nb)) { va = na; vb = nb; } else { va = String(va); vb = String(vb); } if (va < vb) return -1 * dir; if (va > vb) return 1 * dir; return 0; });
+  }
+  return view;
+}
+
+// ===================== 列宽拖动 =====================
+function applySavedWidths() { const tbl = document.getElementById('reportTable'); if (!tbl) return; tbl.querySelectorAll('thead th').forEach(th => { const col = th.getAttribute('data-col'); const w = colWidths[col]; if (w) th.style.width = w + 'px'; }); }
+function saveColWidths() { const tbl = document.getElementById('reportTable'); if (!tbl) return; const saved = {}; tbl.querySelectorAll('thead th').forEach(th => { const col = th.getAttribute('data-col'); if (th.style.width) saved[col] = parseInt(th.style.width, 10); }); colWidths = saved; localStorage.setItem('r2_colWidths', JSON.stringify(saved)); }
+function setupColResize() { const tbl = document.getElementById('reportTable'); if (!tbl) return; applySavedWidths(); tbl.querySelectorAll('.resize-handle').forEach(h => h.addEventListener('mousedown', startResize)); }
+let resizeState = null;
+function startResize(e) { const th = e.target.closest('th'); const tbl = document.getElementById('reportTable'); resizeState = { th, startX: e.clientX, startW: th.getBoundingClientRect().width, tbl }; tbl.classList.add('resizing'); document.addEventListener('mousemove', onResizeMove); document.addEventListener('mouseup', stopResize); e.preventDefault(); }
+function onResizeMove(e) { if (!resizeState) return; const w = Math.max(40, resizeState.startW + (e.clientX - resizeState.startX)); resizeState.th.style.width = w + 'px'; }
+function stopResize() { if (resizeState) { resizeState.tbl.classList.remove('resizing'); saveColWidths(); } resizeState = null; document.removeEventListener('mousemove', onResizeMove); document.removeEventListener('mouseup', stopResize); }
+
+// ===================== 对齐 =====================
+function setColAlign(col, align, save = true) {
+  const tbl = document.getElementById('reportTable'); if (!tbl) return;
+  const idx = Array.from(tbl.querySelectorAll('thead th')).findIndex(th => th.getAttribute('data-col') === col);
+  if (idx < 0) return;
+  tbl.querySelectorAll('thead th')[idx].style.textAlign = align;
+  tbl.querySelectorAll('tbody tr').forEach(tr => tr.children[idx].style.textAlign = align);
+  const tf = tbl.querySelector('tfoot tr'); if (tf) tf.children[idx].style.textAlign = align;
+  if (save) { if (align === 'left') delete colAlign[col]; else colAlign[col] = align; localStorage.setItem('r2_colAlign', JSON.stringify(colAlign)); }
+}
+document.querySelectorAll('#fpAlignAll button').forEach(btn => { btn.onclick = () => { cols.forEach(col => setColAlign(col, btn.getAttribute('data-align'))); showToast('已全部列设为「' + ALIGN_LABEL[btn.getAttribute('data-align')] + '」对齐'); }; });
+document.querySelectorAll('#fpAlign button').forEach(btn => { btn.onclick = () => { if (!fpCol) return; const a = btn.getAttribute('data-align'); document.querySelectorAll('#fpAlign button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); setColAlign(fpCol, a); }; });
+
+// ===================== 筛选弹窗 =====================
+function openFilter(th) {
+  fpCol = th.getAttribute('data-col');
+  const pop = document.getElementById('filterPop');
+  document.getElementById('fpTitle').textContent = '筛选 / 排序 / 对齐：' + fpCol;
+  const allVals = Array.from(new Set(rows.map(r => fmt(r[fpCol], fpCol)))).sort((a, b) => { const na = parseFloat(a), nb = parseFloat(b); if (!isNaN(na) && !isNaN(nb)) return na - nb; return String(a).localeCompare(String(b), 'zh'); });
+  const emptyLabel = '__EMPTY__';
+  const f = filters[fpCol] || { text: '', values: new Set() };
+  const checked = f.values;
+  const box = document.getElementById('fpVals');
+  box.innerHTML = allVals.map(v => { const isEmpty = v === ''; const key = isEmpty ? emptyLabel : v; const id = 'fpv_' + btoa(unescape(encodeURIComponent(key))).replace(/=/g, ''); const ck = checked.has(key) ? 'checked' : ''; const label = isEmpty ? '（空）' : esc(v); return '<label><input type="checkbox" id="' + id + '" data-v="' + esc(key) + '" ' + ck + '> ' + label + '</label>'; }).join('');
+  const toggleBtn = document.getElementById('fpSelToggle');
+  toggleBtn.disabled = allVals.length === 0 || allVals.length > 400;
+  const allChecked = allVals.length > 0 && allVals.every(v => checked.has(v === '' ? emptyLabel : v));
+  toggleBtn.textContent = allChecked ? '取消全选' : '全选';
+  document.getElementById('fpText').value = f.text || '';
+  document.querySelectorAll('#fpAlign button').forEach(b => b.classList.remove('active'));
+  if (colAlign[fpCol]) { const b = document.querySelector('#fpAlign button[data-align="' + colAlign[fpCol] + '"]'); if (b) b.classList.add('active'); }
+  pop.style.display = 'block';
+  const r = th.getBoundingClientRect();
+  let left = r.right, top = r.bottom + 4;
+  if (left + 280 > window.innerWidth) left = window.innerWidth - 290;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+}
+function closeFilter() { document.getElementById('filterPop').style.display = 'none'; fpCol = null; }
+const fpTextEl = document.getElementById('fpText'); if (fpTextEl) fpTextEl.addEventListener('input', filterFpVals);
+function filterFpVals() { const text = document.getElementById('fpText').value.trim().toLowerCase(); document.querySelectorAll('#fpVals label').forEach(lbl => { const inp = lbl.querySelector('input[type=checkbox]'); const v = (inp.getAttribute('data-v') || '').toLowerCase(); lbl.style.display = (!text || v.includes(text)) ? '' : 'none'; }); }
+document.getElementById('fpSelToggle').onclick = () => { const boxes = Array.from(document.querySelectorAll('#fpVals input[type=checkbox]')); if (!boxes.length) return; const allChecked = boxes.every(c => c.checked); boxes.forEach(c => c.checked = !allChecked); const btn = document.getElementById('fpSelToggle'); btn.textContent = allChecked ? '全选' : '取消全选'; };
+document.getElementById('fpSortAsc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: 1 }; render(); closeFilter(); showToast('已按「' + fpCol + '」升序'); } };
+document.getElementById('fpSortDesc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: -1 }; render(); closeFilter(); showToast('已按「' + fpCol + '」降序'); } };
+document.getElementById('fpClear').onclick = () => { if (fpCol) { delete filters[fpCol]; render(); closeFilter(); showToast('已清除「' + fpCol + '」筛选'); } };
+document.getElementById('fpApply').onclick = () => {
+  if (!fpCol) return;
+  const set = new Set();
+  document.querySelectorAll('#fpVals input[type=checkbox]:checked').forEach(c => set.add(c.getAttribute('data-v')));
+  const text = document.getElementById('fpText').value.trim();
+  if (set.size === 0 && !text) delete filters[fpCol]; else filters[fpCol] = { text, values: set };
+  render(); closeFilter(); showToast('已应用「' + fpCol + '」筛选');
+};
+document.addEventListener('click', (e) => { const pop = document.getElementById('filterPop'); if (pop.style.display === 'block' && !pop.contains(e.target) && !(e.target.classList && e.target.classList.contains('filterBtn'))) closeFilter(); });
+
+// ===================== 高度拖动 =====================
+function maxTableHeight() { return Math.max(160, window.innerHeight - 160); }
+function applySavedHeight() { const h = parseInt(localStorage.getItem('r2_tableHeight') || '0', 10); const sc = document.querySelector('.tbl-scroll'); if (!sc) return; if (h && h <= maxTableHeight()) sc.style.maxHeight = h + 'px'; }
+const hr = document.getElementById('heightResizer');
+let hState = null;
+if (hr) hr.addEventListener('mousedown', (e) => { const sc = document.querySelector('.tbl-scroll'); if (!sc) return; hState = { startY: e.clientY, startH: sc.getBoundingClientRect().height }; document.addEventListener('mousemove', onHMove); document.addEventListener('mouseup', onHUp); e.preventDefault(); });
+function onHMove(e) { if (!hState) return; const sc = document.querySelector('.tbl-scroll'); let nh = hState.startH + (e.clientY - hState.startY); nh = Math.max(120, Math.min(nh, maxTableHeight())); sc.style.maxHeight = nh + 'px'; }
+function onHUp() { if (hState) { const sc = document.querySelector('.tbl-scroll'); localStorage.setItem('r2_tableHeight', parseInt(sc.style.maxHeight, 10)); } hState = null; document.removeEventListener('mousemove', onHMove); document.removeEventListener('mouseup', onHUp); }
+window.addEventListener('resize', () => { const sc = document.querySelector('.tbl-scroll'); if (sc) { let h = parseInt(sc.style.maxHeight, 10) || 0; if (h > maxTableHeight()) { sc.style.maxHeight = maxTableHeight() + 'px'; localStorage.setItem('r2_tableHeight', maxTableHeight()); } } });
+
+// ===================== 辅助卡片 =====================
+function renderInfo(rep, createdAt, label) {
+  rep = rep || __DATA__.report;
+  const cap = (label || '报表') + '：' + new Date(createdAt || __DATA__.createdAt).toLocaleString('zh-CN');
+  document.getElementById('updated').textContent = cap;
+  document.getElementById('rowCount').textContent = '共 ' + (rep.rows ? rep.rows.length : 0) + ' 行';
+  const fm = rep.formulas || [];
+  document.getElementById('formulas').innerHTML = fm.map(f => '<div style="margin-bottom:6px"><code class="fm">' + esc(f.formula) + '</code> ' + esc(f.desc) + '</div>').join('') || '<span class="meta">无</span>';
+  const sd = rep.sectionDetails || [];
+  document.getElementById('sectionDetails').innerHTML = sd.map(s => {
+    const rowsHtml = (s.rows || []).slice(0, 50).map(r => '<tr>' + s.columns.map(c => '<td>' + esc(r[c]) + '</td>').join('') + '</tr>').join('');
+    return '<div class="sec-detail" style="margin-bottom:14px"><div style="font-weight:500;margin-bottom:4px">' + esc(s.name) + '</div><div class="meta" style="margin-bottom:6px">' + esc(s.rule) + '</div><div style="overflow:auto"><table><thead><tr>' + s.columns.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' + (s.rowCount > 50 ? '<div class="meta">…仅显示前 50 / ' + s.rowCount + ' 行</div>' : '') + '</div>';
+  }).join('') || '<span class="meta">无</span>';
+}
+
+// ===================== 导航切换 =====================
+document.querySelectorAll('nav a').forEach(a => { a.onclick = () => { const v = a.getAttribute('data-view'); document.querySelectorAll('nav a').forEach(x => x.classList.remove('active')); a.classList.add('active'); document.querySelectorAll('.view').forEach(x => x.classList.remove('active')); document.getElementById('view' + v.charAt(0).toUpperCase() + v.slice(1)).classList.add('active'); if (v === 'history') renderHistory(); if (v === 'days') renderDays(); }; });
+document.querySelectorAll('.card-toggle').forEach(a => { a.onclick = () => { const card = document.getElementById(a.getAttribute('data-target')); const body = card.querySelector('.collapse-body'); const hidden = body.style.display === 'none'; body.style.display = hidden ? '' : 'none'; a.textContent = hidden ? '收起 ▲' : '展开 ▼'; }; });
+// rcToggle/rcBody 已随重构移除（上传区不再有折叠面板）
+document.getElementById('btnPublish').onclick = publishShare;
+document.getElementById('btnSaveMizuno').onclick = saveMizunoStandalone;
+document.getElementById('btnDeleteMizuno').onclick = deleteMizunoStored;
+document.getElementById('btnGenAgg').onclick = generateAggregate;
+document.getElementById('btnSelAll').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]:not([disabled])').forEach(c => c.checked = true); updateDaySelCount(); };
+document.getElementById('btnSelNone').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]').forEach(c => c.checked = false); updateDaySelCount(); };
+document.getElementById('btnExportDay').onclick = exportExcel;
+document.getElementById('btnShareDay').onclick = shareCurrent;
+
+// ===================== 上传文件选择 =====================
+function onPickFile(key, input) {
+  const f = input.files && input.files[0] ? input.files[0] : null;
+  uploadFiles[key] = f;
+  updateUploadStateUI(input.id, f);
+}
+function updateUploadStateUI(inputId, f) {
+  const item = document.getElementById(inputId).closest('.upload-item');
+  const nameBox = item.querySelector('.file-name');
+  const nameSpan = nameBox.querySelector('span');
+  if (f) { nameSpan.textContent = f.name; nameBox.style.display = 'flex'; item.classList.add('ready'); }
+  else { nameBox.style.display = 'none'; item.classList.remove('ready'); }
+}
+
+// ===================== 计算报表 =====================
+function readFileAsText(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); }); }
+function readFileAsArrayBuffer(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(file); }); }
+async function recompute() {
+  const fA = uploadFiles.secA || (document.getElementById('fSecA').files[0]);
+  const fB = uploadFiles.secB || (document.getElementById('fSecB').files[0]);
+  const fC = uploadFiles.secC || (document.getElementById('fSecC').files[0]);
+  let fM = uploadFiles.mizuno || (document.getElementById('fMizuno') && document.getElementById('fMizuno').files[0]) || null;
+  // 如果主计算页未手动选美津浓文件，自动从独立存储加载
+  if (!fM && db) {
+    try { const rec = await idbGet('files', 'mizuno_persist'); if (rec) { fM = new File([rec.data], rec.name, { type: rec.type }); } } catch (e) { /* 忽略 */ }
+  }
+  const status = document.getElementById('rcStatus');
+  if (!fA) { status.textContent = '请至少上传「商品明细报表(xlsx)」'; return; }
+  try {
+    status.textContent = '解析中…';
+    const sections = [];
+    const bufA = await readFileAsArrayBuffer(fA);
+    const wbA = XLSX.read(new Uint8Array(bufA), { type: 'array' });
+    const wsA = wbA.Sheets[wbA.SheetNames[0]];
+    sections.push({ id: 'section_a', transform: 'section1', rows: XLSX.utils.sheet_to_json(wsA, { defval: '' }) });
+    if (fB) { const tB = await readFileAsText(fB); sections.push({ id: 'section_b', rows: ReportCalc.parseCsv(tB, 1) }); }
+    if (fC) { const tC = await readFileAsText(fC); sections.push({ id: 'section_c', rows: ReportCalc.parseCsv(tC, 0) }); }
+    let mizunoMap = {}, mizunoRows = 0, mizunoSheet = '汇总';
+    if (fM) { const bufM = await readFileAsArrayBuffer(fM); const wbM = XLSX.read(new Uint8Array(bufM), { type: 'array' }); const rm = ReportCalc.readMizunoMap(wbM, '汇总'); mizunoMap = rm.map; mizunoRows = rm.dataRows; mizunoSheet = rm.sheet; }
+    const rep = ReportCalc.buildReportBrowser(sections, mizunoMap, { mizunoSheet, mizunoRows });
+    cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+    filters = {}; sortState = { col: null, dir: 0 };
+    viewCreatedAt = Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
+    __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+    renderInfo(rep, viewCreatedAt, '浏览器本地重新计算'); render();
+    status.textContent = '已重新计算：' + rows.length + ' 行' + (rep.mizunoMeta ? ('，商品编码匹配 ' + rep.mizunoMeta.filled + '/' + rep.mizunoMeta.spus) : '');
+    // 用报表「时间」列自动填当日日期 + 更新上传区批次标识
+    const rd = extractReportDate();
+    if (rd) setDPValue('dpCalc', rd);
+    const bdl = document.getElementById('batchDateLabel');
+    if (bdl && rd) bdl.textContent = '📅 报表日期：' + rd + '（' + rows.length + ' 行）';
+    showToast('已根据上传文件重新计算');
+    // 自动持久化上传文件到 IndexedDB
+    persistFiles();
+  } catch (e) { status.textContent = '计算出错：' + e.message; }
+}
+
+// ===================== IndexedDB 持久化 =====================
+const DB_NAME = 'rate-report-v2', DB_VER = 2;
+let db = null;
+function openDB() { return new Promise((res, rej) => { const r = indexedDB.open(DB_NAME, DB_VER); r.onupgradeneeded = e => { const d = e.target.result; if (!d.objectStoreNames.contains('files')) d.createObjectStore('files'); if (!d.objectStoreNames.contains('snapshots')) d.createObjectStore('snapshots', { keyPath: 'id' }); if (!d.objectStoreNames.contains('days')) d.createObjectStore('days', { keyPath: 'id' }); if (!d.objectStoreNames.contains('raw_records')) d.createObjectStore('raw_records', { keyPath: 'id' }); if (!d.objectStoreNames.contains('mizuno_persist')) d.createObjectStore('mizuno_persist'); }; r.onsuccess = e => { db = e.target.result; res(db); }; r.onerror = e => rej(e); }); }
+function idbPut(store, k, v) { return new Promise((res, rej) => { const tx = db.transaction(store, 'readwrite'); const os = tx.objectStore(store); // 有 keyPath 的 store（如 raw_records/days/snapshots）不能传显式键，否则报 "in-line keys" 错误
+  if (os.keyPath) { os.put(v); } else { os.put(v, k); } tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
+function idbGet(store, k) { return new Promise((res, rej) => { const tx = db.transaction(store, 'readonly'); const rq = tx.objectStore(store).get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); }
+function idbGetAll(store) { return new Promise((res, rej) => { const tx = db.transaction(store, 'readonly'); const rq = tx.objectStore(store).getAll(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); }); }
+function idbDelete(store, k) { return new Promise((res, rej) => { const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).delete(k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
+
+// 迁移：把重构前的旧数据（days 存储，存的是算好的报表）转换为新结构（raw_records）。
+// 旧数据没有原始文件，但有算好的 legacyReport，可直接用于查看/聚合，不会丢失用户已保存的内容。
+async function migrateLegacyData() {
+  try {
+    const legacy = await idbGetAll('days');
+    if (!legacy || !legacy.length) return 0;
+    let n = 0;
+    for (const d of legacy) {
+      const isShared = String(d.id).indexOf('shared_') === 0;
+      const id = (isShared ? 'shared_' : 'legacy_') + d.date + '_' + (d.createdAt || Date.now());
+      await idbPut('raw_records', id, {
+        id: id, date: d.date, createdAt: d.createdAt || Date.now(), updatedAt: d.createdAt || Date.now(),
+        files: null, legacyReport: d.report || null, shared: isShared
+      });
+      n++;
+    }
+    for (const d of legacy) await idbDelete('days', d.id); // 清空旧存储，避免重复迁移
+    console.log('[迁移] 已将 ' + n + ' 条旧数据转入新结构');
+    return n;
+  } catch (e) { console.warn('[迁移] 失败', e); return 0; }
+}
+async function persistFiles() {
+  try {
+    const data = { savedAt: Date.now(), files: {} };
+    for (const key of ['secA', 'secB', 'secC', 'mizuno']) {
+      const f = uploadFiles[key];
+      if (f) data.files[key] = { name: f.name, type: f.type, data: await f.arrayBuffer() };
+    }
+    await idbPut('files', 'uploadFiles', data);
+    document.getElementById('fileSavedTip').textContent = '✓ 源文件已自动保存在本机浏览器';
+  } catch (e) { document.getElementById('fileSavedTip').textContent = '（文件保存失败：' + e.message + '）'; }
+}
+async function restoreFiles() {
+  try {
+    const data = await idbGet('files', 'uploadFiles');
+    if (!data || !data.files) return false;
+    let any = false;
+    for (const key of ['secA', 'secB', 'secC', 'mizuno']) {
+      const f = data.files[key];
+      if (f) { uploadFiles[key] = new File([f.data], f.name, { type: f.type }); updateUploadStateUI({ secA: 'fSecA', secB: 'fSecB', secC: 'fSecC', mizuno: 'fMizuno' }[key], uploadFiles[key]); any = true; }
+    }
+    if (any) document.getElementById('fileSavedTip').textContent = '✓ 已恢复上次上传的源文件，可直接点「计算报表」';
+    return any;
+  } catch (e) { return false; }
+}
+
+// ===================== 我的报表（快照） =====================
+function getReportObject() { return { columns: cols, rows: JSON.parse(JSON.stringify(rows)), percentColumns: Array.from(pct), totals: totals, mizunoMeta: viewMizunoMeta, formulas: (__DATA__.report.formulas) || [], sectionDetails: (__DATA__.report.sectionDetails) || [] }; }
+async function saveSnapshot() {
+  if (!rows.length) { showToast('当前没有可保存的报表'); return; }
+  const snap = { id: 'snap_' + Date.now(), createdAt: Date.now(), name: '报表 ' + new Date().toLocaleString('zh-CN'), report: getReportObject() };
+  await idbPut('snapshots', snap.id, snap);
+  showToast('已保存到「我的报表」');
+}
+async function renderHistory() {
+  const list = (await idbGetAll('snapshots')).sort((a, b) => b.createdAt - a.createdAt);
+  const el = document.getElementById('snapList');
+  const badge = document.getElementById('snapCount');
+  if (list.length) { badge.style.display = ''; badge.textContent = list.length; } else { badge.style.display = 'none'; }
+  if (!list.length) { el.innerHTML = '<div class="snap-empty">还没有保存的报表。在「上传计算」里算好报表后，点「保存为我的报表」即可在此留存。</div>'; return; }
+  el.innerHTML = list.map(s => {
+    const r = s.report; const rc = r.rows ? r.rows.length : 0;
+    return '<div class="snap-item"><div class="snap-info"><div class="snap-name">' + esc(s.name) + '</div><div class="snap-sub">' + new Date(s.createdAt).toLocaleString('zh-CN') + ' · ' + rc + ' 行</div></div><div class="snap-btns"><button onclick="loadSnapshot(\'' + s.id + '\')">加载</button><button class="btnGhost" onclick="deleteSnapshot(\'' + s.id + '\')">删除</button></div></div>';
+  }).join('');
+}
+async function loadSnapshot(id) {
+  const snap = await idbGet('snapshots', id);
+  if (!snap) return;
+  const rep = snap.report;
+  cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+  filters = {}; sortState = { col: null, dir: 0 }; viewCreatedAt = snap.createdAt; viewMizunoMeta = rep.mizunoMeta || null;
+  __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+  renderInfo(rep, snap.createdAt, '我的报表'); render();
+  showToast('已加载：' + snap.name);
+  document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
+  document.querySelector('nav a[data-view="calc"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  document.getElementById('viewCalc').classList.add('active');
+}
+async function deleteSnapshot(id) {
+  await idbDelete('snapshots', id);
+  showToast('已删除该报表');
+  renderHistory();
+}
+
+// ===================== 每日数据 / 多天综合 =====================
+// 从处理好的综合费率报表「时间」列提取当日日期（单天报表每行应为同一天）；优先返回 YYYY-MM-DD 标准格式
+function extractReportDate() {
+  let raw = '';
+  for (const r of rows) {
+    const t = (r['时间'] ?? '').toString().trim();
+    if (t) { raw = t; break; }
+  }
+  if (!raw) return '';
+  // 按数字分组提取 年/月/日（兼容 2026-07-25、2026/07/25、2026年7月25日、2026.07.25、2026-07-25 14:30:00 等）
+  const parts = raw.split(/[^0-9]+/).filter(s => s.length > 0);
+  if (parts.length >= 3) {
+    const y = parts[0], m = parts[1], d = parts[2];
+    if (/^\d{4}$/.test(y) && +m >= 1 && +m <= 12 && +d >= 1 && +d <= 31) {
+      const mm = String(+m).padStart(2, '0'), dd = String(+d).padStart(2, '0');
+      return y + '-' + mm + '-' + dd;
+    }
+  }
+  return raw; // 无法识别为完整日期（如仅月-日）时原样返回
+}
+function switchToCalc() { document.querySelectorAll('nav a').forEach(x => x.classList.remove('active')); document.querySelector('nav a[data-view="calc"]').classList.add('active'); document.querySelectorAll('.view').forEach(x => x.classList.remove('active')); document.getElementById('viewCalc').classList.add('active'); }
+async function saveDay() {
+  if (!rows.length) { showToast('请先上传文件并计算报表'); return; }
+  // 日期以处理好的综合费率报表里「时间」列为准；取不到时退回手动输入或今天
+  const reportDate = extractReportDate();
+  const manualDate = (document.getElementById('dayDate').value || '').trim();
+  const date = reportDate || manualDate || new Date().toISOString().slice(0, 10);
+  const files = {};
+  for (const key of ['secA', 'secB', 'secC', 'mizuno']) {
+    const f = uploadFiles[key];
+    if (f) files[key] = { name: f.name, type: f.type, data: await f.arrayBuffer() };
+  }
+  const day = { id: 'day_' + date + '_' + Date.now(), date: date, createdAt: Date.now(), files: files, report: getReportObject() };
+  await idbPut('days', day.id, day);
+  showToast('已保存「' + date + '」当日数据');
+  if (document.getElementById('viewDays')) renderDays();
+}
+async function renderDays() {
+  // 从 raw_records 获取所有原始数据记录
+  let all = [];
+  try { all = await idbGetAll('raw_records'); } catch(e) { console.warn('renderDays: raw_records 读取失败', e); }
+  if (!Array.isArray(all)) all = [];
+  all.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+
+  const el = document.getElementById('dayList');
+  if (!el) { console.warn('renderDays: dayList 元素未找到'); return; }
+
+  const badge = document.getElementById('dayCount');
+  if (badge) {
+    if (all.length) { badge.style.display = ''; badge.textContent = all.length; } else { badge.style.display = 'none'; }
+  }
+  if (!all.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
+
+  el.innerHTML = all.map(rec => {
+    const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
+    const isLegacy = !rec.files && rec.legacyReport;
+    const hasAll = !!(fa && fb && fc);
+    const usable = hasAll || !!rec.legacyReport; // 有完整文件或有历史报表都可选
+    const badge = rec.shared ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">分享</span>' : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">旧版</span>' : '');
+    const fileInfo = hasAll
+      ? ((fa ? '✓ 经营状况明细报表' : '✗ 缺经营状况明细报表') + ' · ' + (fc ? '✓ 非全站营销' : '✗ 缺非全站营销') + ' · ' + (fb ? '✓ 全站营销' : '✗ 缺全站营销'))
+      : (isLegacy ? '旧版数据（含已算好的报表，可直接生成综合报表）' : '文件不完整');
+    return '<div class="day-item"><input type="checkbox" value="' + rec.id + '"' + (usable ? '' : ' disabled title="该日期无可用的数据"') + '><div class="day-info"><div class="day-name">' + esc(rec.date) + badge + '</div><div class="day-sub">' +
+      fileInfo +
+      ' · 更新于 ' + new Date(rec.updatedAt || rec.createdAt).toLocaleString('zh-CN') +
+    '</div></div></div>';
+  }).join('');
+  el.querySelectorAll('input[type=checkbox]:not([disabled])').forEach(c => c.addEventListener('change', updateDaySelCount));
+  updateDaySelCount();
+}
+function updateDaySelCount() { const n = document.querySelectorAll('#dayList input[type=checkbox]:checked').length; document.getElementById('daySelCount').textContent = '已选 ' + n + ' 天'; }
+async function loadDayReportById(id) { const d = await idbGet('days', id); if (d) loadDayReport(d); }
+function loadDayReport(d) {
+  const rep = d.report;
+  cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+  filters = {}; sortState = { col: null, dir: 0 }; viewCreatedAt = d.createdAt; viewMizunoMeta = rep.mizunoMeta || null;
+  __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+  currentScopeLabel = '单日 ' + d.date;
+  renderInfo(rep, d.createdAt, '单日 ' + d.date); render(); switchToCalc();
+  showToast('已加载「' + d.date + '」当日报表');
+}
+function aggregateReports(sel) {
+  const map = new Map(); let emptyIdx = 0;
+  for (const d of sel) {
+    for (const r of d.report.rows) {
+      const sk = normKey(r['SPU']);
+      const key = sk ? sk : ('__EMPTY__' + (emptyIdx++));
+      if (!map.has(key)) map.set(key, { '时间': '', 'SPU': r['SPU'] ?? '', '商品编码': r['商品编码'] ?? '', '二级类目': r['二级类目'] ?? '', '三级类目': r['三级类目'] ?? '', '成交金额': 0, '非全站': 0, '全站': 0, '推广合计': 0, '综合费率': '' });
+      const a = map.get(key);
+      a['成交金额'] += Number(r['成交金额']) || 0;
+      a['非全站'] += Number(r['非全站']) || 0;
+      a['全站'] += Number(r['全站']) || 0;
+      a['推广合计'] += Number(r['推广合计']) || 0;
+    }
+  }
+  const outRows = []; let sumDeal = 0, sumPromo = 0;
+  for (const a of map.values()) {
+    const deal = Math.round(a['成交金额'] * 100) / 100;
+    const non = Math.round(a['非全站'] * 100) / 100;
+    const all = Math.round(a['全站'] * 100) / 100;
+    const promo = Math.round((a['非全站'] + a['全站']) * 100) / 100;
+    sumDeal += deal; sumPromo += promo;
+    a['成交金额'] = deal; a['非全站'] = non; a['全站'] = all; a['推广合计'] = promo;
+    a['综合费率'] = (deal > 0 && promo > 0) ? round4(promo / deal) : '';
+    outRows.push(a);
+  }
+  const tDeal = Math.round(sumDeal * 100) / 100;
+  const tPromo = Math.round(sumPromo * 100) / 100;
+  const totals = { '时间': '', 'SPU': '合计', '商品编码': '', '二级类目': '', '三级类目': '', '成交金额': tDeal, '非全站': '', '全站': '', '推广合计': tPromo, '综合费率': (tDeal > 0 ? round4(tPromo / tDeal) : '') };
+  const dailySummary = sel.map(d => { let deal = 0, promo = 0; for (const r of d.report.rows) { deal += Number(r['成交金额']) || 0; promo += Number(r['推广合计']) || 0; } return { '日期': d.date, 'SPU数': d.report.rows.length, '成交金额': round2(deal), '推广合计': round2(promo), '综合费率': deal > 0 ? round4(promo / deal) : '' }; });
+  const formulas = [
+    { col: '成交金额', formula: '=SUM(各日成交金额·按SPU)', desc: '多日综合：先按 SPU 把所选各天的成交金额分别相加' },
+    { col: '推广合计', formula: '=SUM(各日非全站+全站)', desc: '多日综合：先按 SPU 把所选各天的非全站、全站花费分别相加' },
+    { col: '综合费率', formula: '=推广合计合计/成交金额合计', desc: '综合费率 = 推广合计合计 ÷ 成交金额合计' }
+  ];
+  const sectionDetails = [{ id: 'daily', name: '每日汇总（' + sel.length + ' 天）', rule: '所选日期范围内每天的总成交金额、总推广合计与综合费率（综合费率 = 当天推广合计合计 ÷ 当天成交金额合计）。', columns: ['日期', 'SPU数', '成交金额', '推广合计', '综合费率'], rows: dailySummary, rowCount: dailySummary.length }];
+  const dates = sel.map(d => d.date);
+  const scopeLabel = '多日综合（' + dates[0] + (dates.length > 1 ? (' ~ ' + dates[dates.length - 1]) : '') + ' · ' + dates.length + ' 天）';
+  return { columns: SECTION1_ORDER, rows: outRows, percentColumns: ['综合费率'], totals, formulas, sectionDetails, scopeLabel };
+}
+async function generateAggregate() {
+  const checked = Array.from(document.querySelectorAll('#dayList input[type=checkbox]:checked')).map(c => c.value);
+  if (!checked.length) { showToast('请至少勾选一天'); return; }
+
+  const all = await idbGetAll('raw_records');
+  const sel = all.filter(r => checked.includes(r.id)).sort((a, b) => a.date < b.date ? -1 : 1);
+  if (!sel.length) { showToast('未找到选中的数据记录'); return; }
+
+  try {
+    showToast('正在计算…');
+
+    // 取得单条记录的计算结果：有原始文件则实时计算，否则使用迁移/分享带来的 legacyReport
+    async function reportOf(rec) {
+      if (rec.files && rec.files.secA) return await computeReportFromRawRecord(rec);
+      if (rec.legacyReport) return rec.legacyReport;
+      throw new Error(rec.date + ' 缺少原始文件且无可用的历史报表');
+    }
+
+    if (sel.length === 1) {
+      const rep = await reportOf(sel[0]);
+      currentScopeLabel = '单日 ' + sel[0].date;
+      renderAggResult(rep, currentScopeLabel);
+      showToast('已生成「' + sel[0].date + '」综合费率报表');
+    } else {
+      const dayReports = [];
+      for (const rec of sel) {
+        const rep = await reportOf(rec);
+        dayReports.push({ date: rec.date, report: rep });
+      }
+      const agg = aggregateReports(dayReports);
+      currentScopeLabel = agg.scopeLabel;
+      renderAggResult(agg, currentScopeLabel);
+      showToast('已生成多天综合报表（' + sel.length + ' 天）');
+    }
+  } catch (e) {
+    showToast('计算失败：' + e.message);
+    console.error(e);
+  }
+}
+async function deleteDay(id) { await idbDelete('days', id); showToast('已删除该当日数据'); renderDays(); }
+
+// ===================== 导出 Excel =====================
+function exportExcel() {
+  if (!rows.length) { showToast('没有可导出的报表'); return; }
+  try {
+    const out = rows.map(r => { const o = {}; cols.forEach(c => o[c] = fmt(r[c], c)); return o; });
+    const ws = XLSX.utils.json_to_sheet(out, { header: cols });
+    const totalRow = {}; cols.forEach(c => totalRow[c] = fmt(totals ? totals[c] : '', c));
+    XLSX.utils.sheet_add_json(ws, [totalRow], { header: cols, skipHeader: true, origin: -1 });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '综合费率报表');
+    const scope = currentScopeLabel ? currentScopeLabel.replace(/[\\/:*?"<>|]/g, '_') + '_' : '';
+    XLSX.writeFile(wb, '综合费率报表_' + scope + new Date().toISOString().slice(0, 10) + '.xlsx');
+    showToast('已导出 Excel');
+  } catch (e) { showToast('导出失败：' + e.message); }
+}
+
+// ===================== 原始数据记录管理（上传数据原表） =====================
+// 数据模型：IndexedDB 'raw_records' store, key = id
+// { id, date(YYYY-MM-DD), createdAt, updatedAt, files: { secA:{name,type,data}, secB:{name,type,data}, secC:{name,type,data} } }
+let recTempFiles = { secA: null, secB: null, secC: null }; // 表单临时文件
+
+function showRecordForm(editId) {
+  document.getElementById('recordFormCard').style.display = '';
+  document.getElementById('editingRecordId').value = editId || '';
+  // 重置表单
+  document.getElementById('recDate').value = '';
+  recTempFiles = { secA: null, secB: null, secC: null };
+  ['A','B','C'].forEach(k => {
+    const slot = document.getElementById('recSlot' + k);
+    slot.className = 'rec-file-slot';
+    slot.innerHTML = '<span class="rec-file-hint">点击选择 ' + (k==='A'?'xlsx':'csv') + ' 文件</span>';
+    document.getElementById('recSec' + k).value = '';
+  });
+  if (editId) {
+    // 编辑模式：填充现有数据
+    fillFormFromRecord(editId);
+    document.getElementById('recordFormTitle').textContent = '✏️ 编辑数据记录';
+  } else {
+    document.getElementById('recordFormTitle').textContent = '＋ 新增数据记录';
+    // 日期默认为空，用户手动选择
+  }
+  // 滚动到表单
+  document.getElementById('recordFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fillFormFromRecord(id) {
+  const rec = await idbGet('raw_records', id);
+  if (!rec) return;
+  document.getElementById('recDate').value = rec.date;
+  if (rec.files.secA) { recTempFiles.secA = new File([rec.files.secA.data], rec.files.secA.name, { type: rec.files.secA.type }); updateRecSlotUI('secA', recTempFiles.secA); }
+  if (rec.files.secB) { recTempFiles.secB = new File([rec.files.secB.data], rec.files.secB.name, { type: rec.files.secB.type }); updateRecSlotUI('secB', recTempFiles.secB); }
+  if (rec.files.secC) { recTempFiles.secC = new File([rec.files.secC.data], rec.files.secC.name, { type: rec.files.secC.type }); updateRecSlotUI('secC', recTempFiles.secC); }
+}
+
+function onRecPickFile(key, input) {
+  const f = input.files && input.files[0] ? input.files[0] : null;
+  recTempFiles[key] = f;
+  updateRecSlotUI(key, f);
+}
+
+function updateRecSlotUI(key, f) {
+  const map = { secA:'A', secB:'B', secC:'C' };
+  const slot = document.getElementById('recSlot' + map[key]);
+  if (f) {
+    slot.className = 'rec-file-slot ready';
+    slot.innerHTML = '<span class="rec-file-name">' + esc(f.name) + '</span><span class="rec-file-size">' + (f.size / 1024).toFixed(1) + ' KB</span><span style="color:#9ca3af;font-size:11px;cursor:pointer;margin-left:6px" onclick="event.stopPropagation();clearRecFile(\'' + key + '\')">✕</span>';
+  } else {
+    slot.className = 'rec-file-slot';
+    slot.innerHTML = '<span class="rec-file-hint">点击选择 ' + (key==='A'?'xlsx':'csv') + ' 文件</span>';
+  }
+}
+
+function clearRecFile(key) {
+  recTempFiles[key] = null;
+  const fid = 'recSec' + (key==='A'?'A':key==='B'?'B':'C');
+  document.getElementById(fid).value = '';
+  updateRecSlotUI(key, null);
+}
+
+async function saveRawRecord() {
+  try {
+  const date = document.getElementById('recDate').value.trim();
+  if (!date) { showToast('请选择日期'); return; }
+  if (!recTempFiles.secA) { showToast('请选择经营状况明细报表（xlsx）'); return; }
+  if (!recTempFiles.secC) { showToast('请选择非全站营销（csv）'); return; }
+  if (!recTempFiles.secB) { showToast('请选择全站营销（csv）'); return; }
+
+  const editId = document.getElementById('editingRecordId').value;
+  const now = Date.now();
+
+  const fileData = {};
+  for (const key of ['secA','secB','secC']) {
+    const f = recTempFiles[key];
+    if (f) fileData[key] = { name: f.name, type: f.type, size: f.size, data: await f.arrayBuffer() };
+  }
+
+  if (editId) {
+    // 更新现有记录
+    const rec = await idbGet('raw_records', editId);
+    if (!rec) { showToast('记录不存在'); return; }
+    rec.date = date; rec.updatedAt = now; rec.files = fileData;
+    await idbPut('raw_records', editId, rec);
+    showToast('已更新「' + date + '」的记录');
+  } else {
+    // 新增记录，检查同日期是否已存在
+    const existing = await idbGetAll('raw_records');
+    const dup = existing.find(r => r.date === date);
+    if (dup) {
+      if (!confirm('日期「' + date + '」已有记录，是否覆盖？')) return;
+      dup.date = date; dup.updatedAt = now; dup.files = fileData;
+      await idbPut('raw_records', dup.id, dup);
+      showToast('已覆盖更新「' + date + '」的记录');
+    } else {
+      const id = 'raw_' + date.replace(/-/g,'') + '_' + now;
+      await idbPut('raw_records', id, { id:id, date:date, createdAt:now, updatedAt:now, files:fileData });
+      showToast('已保存「' + date + '」的数据记录');
+    }
+  }
+
+  cancelRecordForm();
+  await renderRawRecords();
+  await renderDays(); // 同步刷新查看综合报表的列表
+  } catch(e) { console.error('saveRawRecord 失败', e); showToast('保存失败：' + e.message); }
+}
+
+function cancelRecordForm() {
+  document.getElementById('recordFormCard').style.display = 'none';
+  recTempFiles = { secA: null, secB: null, secC: null };
+}
+
+async function deleteRawRecord(id) {
+  if (!confirm('确定删除这条记录？删除后该日期的原表文件将无法恢复。')) return;
+  await idbDelete('raw_records', id);
+  showToast('已删除记录');
+  await renderRawRecords();
+  await renderDays();
+}
+
+async function renderRawRecords() {
+  let all = [];
+  try { all = await idbGetAll('raw_records'); } catch(e) { /* store may not exist yet */ }
+  all.sort((a,b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+
+  const tbody = document.getElementById('rawRecordsList');
+  const emptyTip = document.getElementById('rawEmptyTip');
+  const countEl = document.getElementById('rawCount');
+
+  countEl.textContent = all.length ? ('共 ' + all.length + ' 条记录') : '';
+
+  if (!all.length) {
+    tbody.innerHTML = '';
+    emptyTip.style.display = '';
+    return;
+  }
+  emptyTip.style.display = 'none';
+
+  tbody.innerHTML = all.map(rec => {
+    const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
+    const isLegacy = !rec.files && rec.legacyReport;
+    const badge = rec.shared ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:0 5px;font-size:10px">分享</span>' : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:0 5px;font-size:10px">旧版</span>' : '');
+    // 时间：取 updatedAt，格式 HH:mm
+    const timeStr = new Date(rec.updatedAt || rec.createdAt).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
+    const fileCell = (f, label, recId) => {
+      if (f) return '<div class="raw-file-cell"><span class="raw-file-dot ok"></span><span class="raw-file-name" title="' + esc(f.name) + '">' + esc(f.name) + '</span>' +
+        (!isLegacy ? '<button class="raw-edit-btn" onclick="showRecordForm(\'' + recId + '\')">编辑</button>' : '') +
+        '</div>';
+      if (isLegacy) return '<div class="raw-file-cell"><span class="raw-file-dot miss"></span><span class="raw-file-empty">旧版（无原文件）</span></div>';
+      return '<div class="raw-file-cell"><span class="raw-file-dot miss"></span><span class="raw-file-empty">未上传</span></div>';
+    };
+    return '<div class="raw-grid-row">' +
+      '<div class="raw-grid-cell"><span class="raw-date-pill"><span class="d-date">' + esc(rec.date) + '</span><span class="d-time">' + timeStr + '</span></span>' + badge + '</div>' +
+      '<div class="raw-grid-cell">' + fileCell(fa, 'secA', rec.id) + '</div>' +
+      '<div class="raw-grid-cell">' + fileCell(fc, 'secC', rec.id) + '</div>' +
+      '<div class="raw-grid-cell">' + fileCell(fb, 'secB', rec.id) + '</div>' +
+      '<div class="raw-grid-cell" style="justify-content:center"><button class="btnGhost" onclick="deleteRawRecord(\'' + rec.id + '\')">删除</button></div>' +
+    '</div>';
+  }).join('');
+}
+
+// 从原始记录读取文件并计算单日报表
+async function computeReportFromRawRecord(rec) {
+  const fA = rec.files.secA ? new File([rec.files.secA.data], rec.files.secA.name, { type: rec.files.secA.type }) : null;
+  const fB = rec.files.secB ? new File([rec.files.secB.data], rec.files.secB.name, { type: rec.files.secB.type }) : null;
+  const fC = rec.files.secC ? new File([rec.files.secC.data], rec.files.secC.name, { type: rec.files.secC.type }) : null;
+
+  if (!fA) throw new Error(rec.date + ' 缺少经营状况明细报表');
+
+  // 加载美津浓
+  let fM = null;
+  try { const mr = await idbGet('files', 'mizuno_persist'); if (mr) fM = new File([mr.data], mr.name, { type: mr.type }); } catch(e) {}
+
+  const sections = [];
+  const bufA = await readFileAsArrayBuffer(fA);
+  const wbA = XLSX.read(new Uint8Array(bufA), { type: 'array' });
+  sections.push({ id: 'section_a', transform: 'section1', rows: XLSX.utils.sheet_to_json(wbA.Sheets[wbA.SheetNames[0]], { defval: '' }) });
+  if (fB) { const tB = await readFileAsText(fB); sections.push({ id: 'section_b', rows: ReportCalc.parseCsv(tB, 1) }); }
+  if (fC) { const tC = await readFileAsText(fC); sections.push({ id: 'section_c', rows: ReportCalc.parseCsv(tC, 0) }); }
+
+  let mizunoMap = {}, mizunoRows = 0, mizunoSheet = '汇总';
+  if (fM) { const bufM = await readFileAsArrayBuffer(fM); const wbM = XLSX.read(new Uint8Array(bufM), { type: 'array' }); const rm = ReportCalc.readMizunoMap(wbM, '汇总'); mizunoMap = rm.map; mizunoRows = rm.dataRows; mizunoSheet = rm.sheet; }
+
+  return ReportCalc.buildReportBrowser(sections, mizunoMap, { mizunoSheet, mizunoRows });
+}
+
+// 在 viewDays 中渲染报表结果表格
+function renderAggResult(rep, scopeLabel) {
+  const card = document.getElementById('aggResultCard');
+  card.style.display = '';
+  document.getElementById('aggResultTitle').textContent = scopeLabel || '综合费率报表';
+
+  // 用全局状态渲染到 aggTableWrap
+  cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+  filters = {}; sortState = { col: null, dir: 0 };
+  viewCreatedAt = Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
+  __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+
+  // 渲染到 aggTableWrap 而不是 tableWrap
+  const wrap = document.getElementById('aggTableWrap');
+  wrap.innerHTML = ''; // 清空旧表
+
+  const table = document.createElement('table');
+  table.className = 'report-table'; table.id = 'aggReportTable';
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  cols.forEach(col => {
+    const th = document.createElement('th');
+    th.setAttribute('data-col', col);
+    const align = colAlign[col]; if (align) th.style.textAlign = align;
+    th.innerHTML = '<span class="th-text">' + esc(col) + '</span><span class="filterBtn" title="筛选/排序/对齐">▾</span><span class="resize-handle"></span>';
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    cols.forEach(col => {
+      const td = document.createElement('td');
+      const align = colAlign[col]; if (align) td.style.textAlign = align;
+      td.textContent = fmt(r[col], col);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  // 合计行
+  const tfoot = document.createElement('tfoot');
+  const ftr = document.createElement('tr');
+  let sumDeal = 0, sumPromo = 0;
+  for (const r of rows) { sumDeal += Number(r['成交金额']) || 0; sumPromo += Number(r['推广合计']) || 0; }
+  const totalDeal = Math.round(sumDeal * 100) / 100;
+  const totalPromo = Math.round(sumPromo * 100) / 100;
+  const totalRate = sumDeal > 0 ? Math.round(totalPromo / totalDeal * 10000) / 10000 : '';
+  cols.forEach(c => {
+    const td = document.createElement('td');
+    if (colAlign[c]) td.style.textAlign = colAlign[c];
+    if (c === '成交金额' || c === '推广合计' || c === '综合费率') td.style.background = '#eef6ff';
+    if (c === 'SPU') td.textContent = '合计';
+    else if (c === '成交金额') td.textContent = totalDeal;
+    else if (c === '推广合计') td.textContent = totalPromo;
+    else if (c === '综合费率') td.textContent = totalRate !== '' ? (totalRate * 100).toFixed(2) + '%' : '';
+    else td.textContent = '';
+    ftr.appendChild(td);
+  });
+  tfoot.appendChild(ftr); table.appendChild(tfoot);
+  wrap.appendChild(table);
+
+  document.getElementById('aggSummary').textContent = '共 ' + rows.length + ' 行 · ' + cols.length + ' 列';
+
+  // 显示导出和分享按钮
+  document.getElementById('btnExportDay').style.display = '';
+  document.getElementById('btnShareDay').style.display = '';
+
+  setupColResizeForAgg();
+}
+
+function setupColResizeForAgg() {
+  const tbl = document.getElementById('aggReportTable');
+  if (!tbl) return;
+  applySavedWidths();
+  tbl.querySelectorAll('.resize-handle').forEach(h => h.addEventListener('mousedown', startResize));
+  tbl.querySelectorAll('.filterBtn').forEach(btn => { btn.onclick = (e) => { e.stopPropagation(); openFilter(btn.closest('th')); }; });
+}
+
+// 报表结果区折叠/展开
+document.addEventListener('DOMContentLoaded', () => {
+  const at = document.getElementById('aggToggle');
+  if (at) at.onclick = () => {
+    const body = document.getElementById('aggResultBody');
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    at.textContent = hidden ? '收起 ▲' : '展开 ▼';
+  };
+});
+
+// ===================== 启动 =====================
+(async () => {
+  try { await openDB(); } catch (e) { console.warn('IndexedDB 不可用', e); }
+  // 先迁移重构前的旧数据，避免用户已保存的内容“消失”
+  try { const n = await migrateLegacyData(); if (n > 0) console.log('迁移旧数据 ' + n + ' 条'); } catch (e) { console.warn('迁移旧数据失败', e); }
+  // 渲染原始数据记录列表
+  if (typeof renderRawRecords === 'function') { try { await renderRawRecords(); } catch (e) { console.warn('renderRawRecords 失败', e); } }
+  // 渲染查看综合报表的日期列表
+  if (typeof renderDays === 'function') { try { await renderDays(); } catch (e) { console.warn('renderDays 失败', e); } }
+  // 渲染美津浓状态
+  if (typeof renderMizunoStatus === 'function') { try { await renderMizunoStatus(); await refreshMizunoRef(); } catch (e) { console.warn('renderMizunoStatus 失败', e); } }
+  // 报表结果区折叠
+  const at = document.getElementById('aggToggle');
+  if (at) at.onclick = () => {
+    const body = document.getElementById('aggResultBody');
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    at.textContent = hidden ? '收起 ▲' : '展开 ▼';
+  };
+  // 打开带 #d= 的分享链接时，自动解码并渲染他人报表
+  const m = location.hash.match(/[#&]d=([^&]+)/);
+  if (m) {
+    try {
+      const rep = await decodeReport(m[1]);
+      if (rep && rep.type === 'days' && Array.isArray(rep.days)) {
+        await loadSharedDays(rep.days);
+      } else if (rep && (rep.columns || rep.rows)) {
+        cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+        viewCreatedAt = rep.createdAt || Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
+        __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+        currentScopeLabel = '他人分享的报表';
+        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
+        showToast('已加载他人分享的报表快照');
+      }
+    } catch (e) { showToast('分享链接解析失败：' + e.message); }
+  }
+  // 页脚版本标记，便于核对是否加载到最新版
+  const footer = document.getElementById('appFooter');
+  if (footer) footer.textContent = '综合费率报表中心 2.0 · 版本 ' + BUILD_ID;
+})();
+</script>
+</body>
+</html>
