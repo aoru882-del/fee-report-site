@@ -357,7 +357,7 @@
 <script src="xlsx.full.min.js"></script>
 <script>
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29i';
+const BUILD_ID = '2026-07-29j';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -365,7 +365,23 @@ function normKey(v) {
   const n = Number(v);
   return isNaN(n) ? String(v).trim() : String(n);
 }
-function normDateStr(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
+function normDateStr(v) {
+  if (v == null || v === '') return '';
+  const s = String(v).trim();
+  // 提取所有数字段
+  const nums = s.match(/\d+/g);
+  if (!nums || !nums.length) return '';
+  // 常见格式匹配: YYYY-MM-DD / YYYY/M/D / YYYY.M.D / YYYY年M月D日 等
+  if (nums.length >= 3 && String(nums[0]).length >= 4) {
+    const y = nums[0];
+    // 补齐月份和日期到两位（处理 7→07 这种情况）
+    const m = String(nums[1]).padStart(2, '0');
+    const d = String(nums[2]).padStart(2, '0');
+    return y + m + d;
+  }
+  // 兜底：直接拼接所有数字（兼容旧逻辑）
+  return s.replace(/[^0-9]/g, '');
+}
 function isEmpty(v) { return v === '' || v === null || v === undefined; }
 function toNum(v) { if (v === '' || v === null || v === undefined) return v; const n = Number(v); return isNaN(n) ? v : n; }
 const SECTION1_ORDER = ['时间', 'SPU', '商品编码', '二级类目', '三级类目', '成交金额', '非全站', '全站', '推广合计', '综合费率'];
