@@ -354,10 +354,24 @@
 </div>
 <div class="footer" id="appFooter">综合费率报表中心 2.0</div>
 
-<script src="xlsx.full.min.js"></script>
 <script>
+// ===================== xlsx 按需加载（避免进页面就下载 862KB） =====================
+let _xlsxPromise = null;
+function ensureXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  if (_xlsxPromise) return _xlsxPromise;
+  _xlsxPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'xlsx.full.min.js?v=' + BUILD_ID;
+    s.onload = () => { window.XLSX ? resolve() : reject(new Error('xlsx 加载异常')); };
+    s.onerror = () => reject(new Error('xlsx 加载失败，请检查网络后重试'));
+    document.head.appendChild(s);
+  });
+  return _xlsxPromise;
+}
+
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29k';
+const BUILD_ID = '2026-07-29l';
 
 // ===================== 浏览器端报表计算（移植自 1.0 calc-browser.js） =====================
 function normKey(v) {
@@ -1066,6 +1080,7 @@ function updateUploadStateUI(inputId, f) {
 function readFileAsText(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); }); }
 function readFileAsArrayBuffer(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(file); }); }
 async function recompute() {
+  await ensureXlsx();
   const fA = uploadFiles.secA || (document.getElementById('fSecA').files[0]);
   const fB = uploadFiles.secB || (document.getElementById('fSecB').files[0]);
   const fC = uploadFiles.secC || (document.getElementById('fSecC').files[0]);
@@ -1545,6 +1560,7 @@ async function renderRawRecords() {
 
 // 从原始记录读取文件并计算单日报表
 async function computeReportFromRawRecord(rec) {
+  await ensureXlsx();
   const fA = rec.files.secA ? new File([rec.files.secA.data], rec.files.secA.name, { type: rec.files.secA.type }) : null;
   const fB = rec.files.secB ? new File([rec.files.secB.data], rec.files.secB.name, { type: rec.files.secB.type }) : null;
   const fC = rec.files.secC ? new File([rec.files.secC.data], rec.files.secC.name, { type: rec.files.secC.type }) : null;
