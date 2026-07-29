@@ -1606,6 +1606,10 @@ function renderAggResult(rep, scopeLabel) {
   card.style.display = '';
   document.getElementById('aggResultTitle').textContent = scopeLabel || '综合费率报表';
 
+  // 用全局状态渲染到 aggTableWrap
+  const wrap = document.getElementById('aggTableWrap');
+  wrap.innerHTML = ''; // 清空旧表
+
   // 显示全站调试信息（确认新代码是否加载）
   let fsDebugHtml = '';
   if (window.__fs_debug) {
@@ -1636,10 +1640,6 @@ function renderAggResult(rep, scopeLabel) {
   filters = {}; sortState = { col: null, dir: 0 };
   viewCreatedAt = Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
   __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
-
-  // 渲染到 aggTableWrap 而不是 tableWrap
-  const wrap = document.getElementById('aggTableWrap');
-  wrap.innerHTML = ''; // 清空旧表
 
   const table = document.createElement('table');
   table.className = 'report-table'; table.id = 'aggReportTable';
