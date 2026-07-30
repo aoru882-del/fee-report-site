@@ -270,7 +270,7 @@
     </div>
     <!-- 查看综合报表视图 -->
     <div class="view" id="viewDays">
-      <div class="note">在「上传数据原表」中按日期添加每天的原表文件记录 → 在此勾选需要的时间段 → 点「生成综合报表」系统自动读取原始文件并计算综合费率。<br>算好后点右侧<b>「发布共享数据」</b>，会把计算结果打包进链接——同事打开即可查看，<b>无需上传任何文件</b>。</div>
+      <div class="note">在「上传数据原表」中按日期添加每天的原表文件记录 → 在此勾选需要的时间段 → 点「生成综合报表」系统自动读取原始文件并计算综合费率。<br>算好后点右侧<b>「发布分享链接」</b>，会把各日期已算好的报表打包进链接——同事打开即可勾选日期段重算、查看综合费率，<b>无需上传任何文件</b>。</div>
       <div id="sharedBanner" style="display:none;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-size:13px">这是别人分享的只读每日数据。勾选你关心的时间段 →「生成综合报表」即可查看对应综合费率（原始上传文件不在链接中）。</div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
         <span class="meta" style="font-weight:500">按日期筛选：</span>
@@ -286,9 +286,8 @@
         <button id="btnSelAll" class="btnGhost">全选</button>
         <button id="btnSelNone" class="btnGhost">清空选择</button>
         <span class="meta" id="daySelCount"></span>
-        <button id="btnPublish" style="background:var(--green);margin-left:auto">发布共享数据</button>
+        <button id="btnPublish" style="background:var(--green);margin-left:auto">发布分享链接</button>
         <button id="btnExportDay" style="background:#0f6e56;display:none">导出 Excel</button>
-        <button id="btnShareDay" style="background:#4f46e5;display:none">复制分享链接</button>
       </div>
       <div class="card"><div id="dayList"></div></div>
 
@@ -373,7 +372,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30a';  // 分享链接紧凑编码（列名单存+行用数组），缩短约23%
+const BUILD_ID = '2026-07-30b';  // 合并分享按钮：删除"复制分享链接"，只保留"发布分享链接"（对方可勾选日期重算）
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -693,20 +692,8 @@ function expandReport(cp) {
   return { columns: c, rows: rows, totals: totals, percentColumns: cp.p || [], mizunoMeta: cp.m || null, createdAt: cp.k };
 }
 function getReportPayload() { return { columns: cols, rows: rows, totals: totals, percentColumns: Array.from(pct), mizunoMeta: viewMizunoMeta, createdAt: viewCreatedAt }; }
-async function shareCurrent() {
-  try {
-    if (!rows.length) { showToast('当前没有可分享的报表'); return; }
-    const payload = compactReport(getReportPayload());
-    const b64u = await encodeReport(payload);
-    const url = location.origin + location.pathname + '#d=' + b64u;
-    history.replaceState(null, '', '#d=' + b64u);
-    let copied = false;
-    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { /* 剪贴板不可用，地址栏已更新 hash */ }
-    showToast(copied ? '分享链接已复制到剪贴板' : '链接已生成，请手动复制地址栏网址');
-  } catch (e) { showToast('生成失败：' + e.message); }
-}
 
-// 发布共享数据：从所有原始记录计算报表后打包进链接（不含原始上传文件，仅含已算好的报表结果）
+// 发布分享链接：从所有原始记录计算报表后打包进链接（每日期一份，对方打开后可勾选日期段重算）
 async function publishShare() {
   const all = await idbGetAll('raw_records');
   if (!all.length) { showToast('还没有可发布的数据记录，请先在「上传数据原表」中添加'); return; }
@@ -1162,7 +1149,6 @@ document.getElementById('btnGenAgg').onclick = generateAggregate;
 document.getElementById('btnSelAll').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]:not([disabled])').forEach(c => c.checked = true); updateDaySelCount(); };
 document.getElementById('btnSelNone').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]').forEach(c => c.checked = false); updateDaySelCount(); };
 document.getElementById('btnExportDay').onclick = exportExcel;
-document.getElementById('btnShareDay').onclick = shareCurrent;
 } catch (e) { showFatal('按钮绑定失败：' + e.message); }
 
 // ===================== 上传文件选择 =====================
@@ -1795,9 +1781,8 @@ function renderAggResult(rep, scopeLabel) {
 
   document.getElementById('aggSummary').textContent = '共 ' + rows.length + ' 行 · ' + cols.length + ' 列';
 
-  // 显示导出和分享按钮
+  // 显示导出按钮
   document.getElementById('btnExportDay').style.display = '';
-  document.getElementById('btnShareDay').style.display = '';
 
   setupColResizeForAgg();
 }
