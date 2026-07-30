@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30k';  // 计算中弹窗 + 分享链接数据过滤旧版残留
+const BUILD_ID = '2026-07-30l';  // 分享链接数据强过滤+发布时本地预过滤，彻底清除旧版数据
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -730,9 +730,16 @@ async function publishShare() {
 
   const all = await idbGetAll('raw_records');
   if (!all.length) { overlay.classList.remove('show'); showToast('还没有可发布的数据记录，请先在「上传数据原表」中添加'); return; }
+  // 过滤掉不完整的残留记录（避免打包进分享链接）
+  var validRecords = all.filter(function (r) {
+    var hasComplete = !!(r.files && r.files.secA && r.files.secB && r.files.secC);
+    var hasLegacy = !!r.legacyReport;
+    return hasComplete || hasLegacy;
+  });
+  if (!validRecords.length) { overlay.classList.remove('show'); showToast('没有完整的数据记录可发布'); return; }
   showToast('正在计算全部记录的报表…');
   const days = [];
-  for (const rec of all) {
+  for (const rec of validRecords) {
     try {
       let rep;
       if (rec.files && rec.files.secA) rep = await computeReportFromRawRecord(rec);
@@ -778,12 +785,23 @@ async function copyShareLink() {
 
 // 把分享链接里的每日数据载入内存（不写入 IndexedDB，避免污染"上传数据原表"和日期列表）
 async function loadSharedDays(days) {
-  // 过滤掉没有有效报表数据的残留记录（旧版分享链接可能包含空壳数据）
+  // 强过滤：只保留有实际业务数据的报表
   __sharedDaysCache = days
     .filter(function (d) {
-      if (!d.report) return false;
-      // 有效报表必须有 rows 和 columns
-      if (!d.report.rows || !d.report.columns || !d.report.rows.length || !d.report.columns.length) return false;
+      if (!d || !d.report) return false;
+      var r = d.report;
+      // 必须有 rows 和 columns 数组
+      if (!r.rows || !Array.isArray(r.rows) || !r.rows.length) return false;
+      if (!r.columns || !Array.isArray(r.columns) || !r.columns.length) return false;
+      // 至少有一行数据行（非空行：至少有一个单元格有内容）
+      var hasDataRows = r.rows.some(function (row) {
+        return row && Array.isArray(row) && row.some(function (cell) {
+          return cell !== null && cell !== undefined && cell !== '' && cell !== '—';
+        });
+      });
+      if (!hasDataRows) return false;
+      // 日期必须合法
+      if (!d.date || String(d.date).length < 10) return false;
       return true;
     })
     .map(function (d, i) {
@@ -799,8 +817,11 @@ async function loadSharedDays(days) {
     });
   const banner = document.getElementById('sharedBanner');
   if (banner) banner.style.display = '';
+  if (days.length > __sharedDaysCache.length) {
+    console.log('[分享] 过滤掉 ' + (days.length - __sharedDaysCache.length) + ' 条无效/残留记录');
+  }
   await renderDays();
-  showToast('已加载分享的每日数据（' + __sharedDaysCache.length + ' 天），可勾选时间段生成综合报表');
+  showToast('已加载分享的每日数据（' + __sharedDaysCache.length + ' 天' + (days.length > __sharedDaysCache.length ? '，已过滤 ' + (days.length - __sharedDaysCache.length) + ' 条旧版残留' : '') + '），可勾选时间段生成综合报表');
 }
 
 // ===================== 美津浓总表独立管理 =====================
