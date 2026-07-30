@@ -373,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30d';  // 拆分分享按钮：发布计算(触发)+复制分享链接(算完后可点，缓存链接不重算)
+const BUILD_ID = '2026-07-30e';  // 分享数据改纯内存缓存，不再写IndexedDB（彻底消除"分享"残留行）
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -697,6 +697,9 @@ function getReportPayload() { return { columns: cols, rows: rows, totals: totals
 // 缓存上次发布计算生成的分享链接
 var __lastShareUrl = null;
 
+// 分享数据纯内存缓存（不写入 IndexedDB，避免污染原始记录列表）
+var __sharedDaysCache = [];
+
 // 发布计算：从所有原始记录计算报表后打包进链接（每日期一份，对方打开后可勾选日期段重算）
 async function publishShare() {
   const btnCopy = document.getElementById('btnCopyShare');
@@ -751,16 +754,19 @@ async function copyShareLink() {
   }
 }
 
-// 把分享链接里的每日数据载入本机（覆盖同名 shared_ 条目，避免重复打开叠加）
+// 把分享链接里的每日数据载入内存（不写入 IndexedDB，避免污染"上传数据原表"和日期列表）
 async function loadSharedDays(days) {
-  try {
-    const existing = await idbGetAll('raw_records');
-    for (const d of existing) { if (d.shared) await idbDelete('raw_records', d.id); }
-  } catch (e) { /* 忽略 */ }
-  for (const d of days) {
-    const id = 'shared_' + d.date + '_' + (d.createdAt || Date.now());
-    await idbPut('raw_records', id, { id: id, date: d.date, createdAt: d.createdAt || Date.now(), updatedAt: d.createdAt || Date.now(), files: null, legacyReport: d.report, shared: true });
-  }
+  __sharedDaysCache = days.map(function (d, i) {
+    return {
+      id: '__shared_' + i + '_' + (d.createdAt || Date.now()),
+      date: d.date,
+      createdAt: d.createdAt || Date.now(),
+      updatedAt: d.createdAt || Date.now(),
+      files: null,
+      legacyReport: d.report,
+      shared: true
+    };
+  });
   const banner = document.getElementById('sharedBanner');
   if (banner) banner.style.display = '';
   await renderDays();
@@ -1371,24 +1377,27 @@ async function saveDay() {
   if (document.getElementById('viewDays')) renderDays();
 }
 async function renderDays() {
-  // 从 raw_records 获取所有原始数据记录
+  // 从 raw_records 获取所有原始数据记录（不含分享数据，分享数据在内存缓存中）
   let all = [];
   try { all = await idbGetAll('raw_records'); } catch(e) { console.warn('renderDays: raw_records 读取失败', e); }
   if (!Array.isArray(all)) all = [];
-  all.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  // 合并内存中的分享数据（对方打开链接后可见）
+  var merged = all.concat(__sharedDaysCache);
+  merged.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
 
   const el = document.getElementById('dayList');
   if (!el) { console.warn('renderDays: dayList 元素未找到'); return; }
 
   const badge = document.getElementById('dayCount');
   if (badge) {
-    if (all.length) { badge.style.display = ''; badge.textContent = all.length; } else { badge.style.display = 'none'; }
+    if (merged.length) { badge.style.display = ''; badge.textContent = merged.length; } else { badge.style.display = 'none'; }
   }
-  if (!all.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
+  if (!merged.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
 
-  el.innerHTML = all.map(rec => {
+  el.innerHTML = merged.map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
     const isLegacy = !rec.files && rec.legacyReport;
+    const isShared = !!rec.shared;
     const hasAll = !!(fa && fb && fc);
     const usable = hasAll || !!rec.legacyReport; // 有完整文件或有历史报表都可选
     const badge = rec.shared ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">分享</span>' : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">旧版</span>' : '');
@@ -1461,7 +1470,9 @@ async function generateAggregate() {
   if (!checked.length) { showToast('请至少勾选一天'); return; }
 
   const all = await idbGetAll('raw_records');
-  const sel = all.filter(r => checked.includes(r.id)).sort((a, b) => a.date < b.date ? -1 : 1);
+  // 合并内存中的分享数据，使对方打开分享链接后勾选日期能正确计算
+  var merged = all.concat(__sharedDaysCache);
+  const sel = merged.filter(r => checked.includes(r.id)).sort((a, b) => a.date < b.date ? -1 : 1);
   if (!sel.length) { showToast('未找到选中的数据记录'); return; }
 
   try {
@@ -1641,8 +1652,7 @@ async function deleteRawRecord(id) {
 async function renderRawRecords() {
   let all = [];
   try { all = await idbGetAll('raw_records'); } catch(e) { /* store may not exist yet */ }
-  // 过滤掉分享链接载入的残留记录（shared 标记），只显示用户自己上传的原始文件记录
-  all = all.filter(r => !r.shared);
+  // 分享数据不再写入 raw_records（改用内存缓存），此处无需过滤
   all.sort((a,b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
 
   const tbody = document.getElementById('rawRecordsList');
@@ -1840,8 +1850,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===================== 启动 =====================
 (async () => {
   try { await openDB(); } catch (e) { console.warn('IndexedDB 不可用', e); }
-  // 清理分享链接载入的残留 shared_ 记录（避免污染"上传数据原表"列表）
-  try { const all = await idbGetAll('raw_records'); const shared = all.filter(r => r.shared); if (shared.length) { for (const s of shared) { try { await idbDelete('raw_records', s.id); } catch(e) {} } console.log('已清理 ' + shared.length + ' 条分享残留记录'); } } catch(e) {}
   // 先迁移重构前的旧数据，避免用户已保存的内容"消失"
   try { const n = await migrateLegacyData(); if (n > 0) console.log('迁移旧数据 ' + n + ' 条'); } catch (e) { console.warn('迁移旧数据失败', e); }
   // 渲染原始数据记录列表
