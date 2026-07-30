@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30m';  // 修复loadSharedDays过滤bug(rows实为对象数组)+空数据告警
+const BUILD_ID = '2026-07-30n';  // 一键刷新按钮+确认m版过滤修复已生效
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -398,8 +398,18 @@ const BUILD_ID = '2026-07-30m';  // 修复loadSharedDays过滤bug(rows实为对�
     const v = u.searchParams.get('v');
     if (v && v !== BUILD_ID) {
       const bar = document.createElement('div');
-      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:8px 12px;font-size:13px;text-align:center;font-weight:600';
-      bar.textContent = '⚠️ 当前代码可能不是最新版（链接版本 ' + v + ' ≠ 实际 ' + BUILD_ID + '）。请按 Ctrl+Shift+R 硬刷新，或关闭标签页重新打开最新链接。';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 14px;font-size:13px;text-align:center;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px';
+      bar.innerHTML = '⚠️ 当前代码可能不是最新版（链接版本 ' + v + ' ≠ 实际 ' + BUILD_ID + '）。浏览器缓存了旧版本。';
+      const btn = document.createElement('button');
+      btn.textContent = '🔄 点击刷新到最新版';
+      btn.style.cssText = 'background:#fff;color:#c0392b;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:700;font-size:13px';
+      btn.onclick = function () {
+        // 用 _t= 时间戳参数强制破坏缓存
+        var url = new URL(location.href);
+        url.searchParams.set('_t', Date.now());
+        location.href = url.toString();
+      };
+      bar.appendChild(btn);
       document.body.appendChild(bar);
     }
   } catch (e) {}
