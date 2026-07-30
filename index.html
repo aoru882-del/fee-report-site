@@ -389,28 +389,29 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30p';  // 分享链接加载时4层强过滤(行数+数值+日期+字段)，彻底杜绝残留
+const BUILD_ID = '2026-07-30q';  // 版本不匹配自动跳转+渲染层最终封死不可用记录
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
+// 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
 (function checkCacheVersion() {
   try {
     const u = new URL(location.href);
     const v = u.searchParams.get('v');
     if (v && v !== BUILD_ID) {
-      const bar = document.createElement('div');
-      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 14px;font-size:13px;text-align:center;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px';
-      bar.innerHTML = '⚠️ 当前代码可能不是最新版（链接版本 ' + v + ' ≠ 实际 ' + BUILD_ID + '）。浏览器缓存了旧版本。';
-      const btn = document.createElement('button');
-      btn.textContent = '🔄 点击刷新到最新版';
-      btn.style.cssText = 'background:#fff;color:#c0392b;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:700;font-size:13px';
-      btn.onclick = function () {
-        // 用 _t= 时间戳参数强制破坏缓存
-        var url = new URL(location.href);
-        url.searchParams.set('_t', Date.now());
-        location.href = url.toString();
-      };
-      bar.appendChild(btn);
-      document.body.appendChild(bar);
+      // 自动跳转：用当前版本号 + 时间戳强制破坏缓存
+      var freshUrl = new URL(location.href);
+      freshUrl.searchParams.set('v', BUILD_ID);
+      freshUrl.searchParams.set('_t', Date.now());
+      // 保留 hash（分享数据）
+      freshUrl.hash = location.hash;
+      // 延迟跳转，让用户看到提示
+      document.addEventListener('DOMContentLoaded', function () {
+        var bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999999;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center';
+        bar.innerHTML = '<div style="background:#fff;padding:30px 40px;border-radius:12px;text-align:center;max-width:400px"><div style="font-size:24px;margin-bottom:12px">🔄</div><div style="font-size:15px;color:#333;margin-bottom:16px;font-weight:600">正在加载最新版本…</div><div style="font-size:13px;color:#888">' + v + ' → ' + BUILD_ID + '</div></div>';
+        document.body.appendChild(bar);
+        setTimeout(function () { location.href = freshUrl.toString(); }, 800);
+      });
     }
   } catch (e) {}
 })();
@@ -1540,7 +1541,19 @@ async function renderDays() {
   }
   if (!merged.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
 
-  el.innerHTML = merged.map(rec => {
+  el.innerHTML = merged.filter(function(rec) {
+    // ★ 最终安全网：渲染前再过滤一次，任何无可用数据的记录不显示
+    var fa = rec.files ? rec.files.secA : null;
+    var fb = rec.files ? rec.files.secB : null;
+    var fc = rec.files ? rec.files.secC : null;
+    var hasAll = !!(fa && fb && fc);
+    var isLegacy = !rec.files && !!rec.legacyReport;
+    if (!hasAll && !isLegacy) {
+      console.log('[renderDays] 隐藏不可用记录:', rec.date, rec.id);
+      return false;
+    }
+    return true;
+  }).map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
     const isLegacy = !rec.files && rec.legacyReport;
     const isShared = !!rec.shared;
