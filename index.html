@@ -298,6 +298,8 @@
           <span id="aggResultTitle">综合费率报表</span>
           <a href="javascript:void(0)" id="aggToggle" style="color:var(--brand);font-size:12px;cursor:pointer">收起 ▲</a>
         </div>
+        <!-- 计算状态指示器（持续可见） -->
+        <div id="calcStatusBar" style="display:none;padding:10px 14px;border-radius:6px;font-size:14px;font-weight:600;text-align:center;margin-bottom:8px"></div>
         <div id="aggResultBody">
           <div id="aggSummary" class="meta"></div>
           <div style="height:8px"></div>
@@ -371,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29q';
+const BUILD_ID = '2026-07-29r';  // 计算状态指示器 + 全站调试信息醒目化
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -629,6 +631,25 @@ function fmt(v, col) {
 }
 function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
+// 计算状态指示器（持续可见，不自动消失）
+function showCalcStatus(status, msg) {
+  const bar = document.getElementById('calcStatusBar');
+  if (!bar) return;
+  const card = document.getElementById('aggResultCard');
+  if (card) card.style.display = '';
+  bar.style.display = '';
+  bar.textContent = msg;
+  if (status === 'calculating') {
+    bar.style.background = '#e0e7ff'; bar.style.color = '#3730a3'; bar.style.border = '1px solid #a5b4fc';
+  } else if (status === 'success') {
+    bar.style.background = '#dcfce7'; bar.style.color = '#166534'; bar.style.border = '1px solid #86efac';
+  } else if (status === 'error') {
+    bar.style.background = '#fef2f2'; bar.style.color = '#991b1b'; bar.style.border = '1px solid #fca5a5';
+  } else {
+    bar.style.background = '#f1f5f9'; bar.style.color = '#475569'; bar.style.border = '1px solid #cbd5e1';
+  }
+}
+function hideCalcStatus() { const bar = document.getElementById('calcStatusBar'); if (bar) bar.style.display = 'none'; }
 
 // ===================== 分享链接（压缩内嵌 #d=） =====================
 function bytesToB64url(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -1393,7 +1414,7 @@ async function generateAggregate() {
   if (!sel.length) { showToast('未找到选中的数据记录'); return; }
 
   try {
-    showToast('正在计算…');
+    showCalcStatus('calculating', '⏳ 正在计算综合报表，请稍候…');
 
     // 取得单条记录的计算结果：有原始文件则实时计算，否则使用迁移/分享带来的 legacyReport
     async function reportOf(rec) {
@@ -1406,6 +1427,7 @@ async function generateAggregate() {
       const rep = await reportOf(sel[0]);
       currentScopeLabel = '单日 ' + sel[0].date;
       renderAggResult(rep, currentScopeLabel);
+      showCalcStatus('success', '✅ 计算成功 — 已生成「' + sel[0].date + '」综合费率报表');
       showToast('已生成「' + sel[0].date + '」综合费率报表');
     } else {
       const dayReports = [];
@@ -1416,9 +1438,11 @@ async function generateAggregate() {
       const agg = aggregateReports(dayReports);
       currentScopeLabel = agg.scopeLabel;
       renderAggResult(agg, currentScopeLabel);
+      showCalcStatus('success', '✅ 计算成功 — 已生成多天综合报表（' + sel.length + ' 天）');
       showToast('已生成多天综合报表（' + sel.length + ' 天）');
     }
   } catch (e) {
+    showCalcStatus('error', '❌ 计算失败：' + e.message);
     showToast('计算失败：' + e.message);
     console.error(e);
   }
@@ -1640,23 +1664,22 @@ function renderAggResult(rep, scopeLabel) {
   const wrap = document.getElementById('aggTableWrap');
   wrap.innerHTML = ''; // 清空旧表
 
-  // 显示全站调试信息（确认新代码是否加载）
+  // 显示全站调试信息（确认新代码是否加载，帮助定位全站=0问题）
   let fsDebugHtml = '';
   if (window.__fs_debug) {
     const d = window.__fs_debug;
-    fsDebugHtml = '<div style="background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:8px 12px;margin-bottom:8px;font-size:12px;border-radius:4px;line-height:1.8">'
-      + '<b>🔍 全站调试信息：</b>'
-      + '板块一时间(原始): ' + d.sec1Time_raw
-      + ' → 标准化: <b>' + d.sec1Time_norm + '</b> | '
-      + '检测到日期列名: <b>' + d.dateCol + '</b> | '
-      + '总行数: ' + d.totalRows
-      + ' | 保留: <b style="color:' + (d.kept > 0 ? 'green' : 'red') + '">' + (d.kept || 0) + '</b>'
-      + ' | 过滤: ' + (d.skipped || 0)
-      + (d.sampleDates && d.sampleDates.length ? ' | 前3行日期原始值: ' + JSON.stringify(d.sampleDates.map(s => s.raw)) : '')
+    const keptOk = (d.kept || 0) > 0;
+    fsDebugHtml = '<div style="background:' + (keptOk ? '#f0fdf4' : '#fef2f2') + ';border:2px solid ' + (keptOk ? '#86efac' : '#fca5a5') + ';color:' + (keptOk ? '#166534' : '#991b1b') + ';padding:12px 16px;margin-bottom:10px;font-size:14px;font-weight:500;border-radius:6px;line-height:2">'
+      + '<div style="font-size:15px;font-weight:700;margin-bottom:4px">' + (keptOk ? '✅ 全站数据正常' : '⚠️ 全站数据异常 — 全站列可能为0') + '</div>'
+      + '<div>📅 板块一时间(原始): <b>' + d.sec1Time_raw + '</b> → 标准化: <b>' + d.sec1Time_norm + '</b></div>'
+      + '<div>📋 检测到日期列名: <b>' + d.dateCol + '</b> | CSV表头所有列: <b>' + (d.headers || []).join(' / ') + '</b></div>'
+      + '<div>📊 总行数: <b>' + d.totalRows + '</b> | 日期匹配保留: <b style="color:' + (keptOk ? '#166534' : '#dc2626') + ';font-size:16px">' + (d.kept || 0) + ' 行</b> | 被过滤: <b>' + (d.skipped || 0) + ' 行</b></div>'
+      + (d.sampleDates && d.sampleDates.length ? '<div>🔍 前3行日期原始值→标准化: ' + d.sampleDates.map(s => '<b>' + s.raw + '</b>→<b>' + s.norm + '</b>').join(' | ') + '</div>' : '')
+      + (!keptOk ? '<div style="margin-top:6px;color:#dc2626;font-weight:700">💡 如果"保留=0"，说明全站CSV的日期和板块一的时间对不上，请检查原始文件中的日期格式。</div>' : '')
       + '</div>';
   } else {
-    fsDebugHtml = '<div style="background:#f8d7da;border:1px solid #dc3545;color:#721c24;padding:8px 12px;margin-bottom:8px;font-size:12px;border-radius:4px">'
-      + '<b>⚠️ 未检测到全站调试信息 — 可能浏览器仍在使用旧版缓存代码！</b> 请按 Ctrl+Shift+R 硬刷新。</div>';
+    fsDebugHtml = '<div style="background:#fef2f2;border:2px solid #fca5a5;color:#991b1b;padding:12px 16px;margin-bottom:10px;font-size:14px;font-weight:600;border-radius:6px">'
+      + '<b>⚠️ 未检测到全站调试信息</b> — 可能浏览器仍在使用旧版缓存代码！请按 Ctrl+Shift+R 硬刷新，或关闭标签页重新打开链接。</div>';
   }
   const existingDebug = document.getElementById('fsDebugInfo');
   if (existingDebug) existingDebug.remove();
