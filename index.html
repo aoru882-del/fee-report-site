@@ -286,7 +286,8 @@
         <button id="btnSelAll" class="btnGhost">全选</button>
         <button id="btnSelNone" class="btnGhost">清空选择</button>
         <span class="meta" id="daySelCount"></span>
-        <button id="btnPublish" style="background:var(--green);margin-left:auto">发布分享链接</button>
+        <button id="btnPublish" style="background:var(--green);margin-left:auto">发布计算</button>
+        <button id="btnCopyShare" style="background:#9ca3af;cursor:not-allowed;opacity:.6;margin-left:8px" disabled>复制分享链接</button>
         <button id="btnExportDay" style="background:#0f6e56;display:none">导出 Excel</button>
       </div>
       <div class="card"><div id="dayList"></div></div>
@@ -372,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30c';  // 清理分享残留记录：上传数据原表过滤shared_条目+启动时自动清理
+const BUILD_ID = '2026-07-30d';  // 拆分分享按钮：发布计算(触发)+复制分享链接(算完后可点，缓存链接不重算)
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -693,8 +694,18 @@ function expandReport(cp) {
 }
 function getReportPayload() { return { columns: cols, rows: rows, totals: totals, percentColumns: Array.from(pct), mizunoMeta: viewMizunoMeta, createdAt: viewCreatedAt }; }
 
-// 发布分享链接：从所有原始记录计算报表后打包进链接（每日期一份，对方打开后可勾选日期段重算）
+// 缓存上次发布计算生成的分享链接
+var __lastShareUrl = null;
+
+// 发布计算：从所有原始记录计算报表后打包进链接（每日期一份，对方打开后可勾选日期段重算）
 async function publishShare() {
+  const btnCopy = document.getElementById('btnCopyShare');
+  // 禁用复制按钮，显示计算中
+  btnCopy.disabled = true;
+  btnCopy.style.background = '#9ca3af';
+  btnCopy.style.cursor = 'not-allowed';
+  btnCopy.style.opacity = '.6';
+
   const all = await idbGetAll('raw_records');
   if (!all.length) { showToast('还没有可发布的数据记录，请先在「上传数据原表」中添加'); return; }
   showToast('正在计算全部记录的报表…');
@@ -715,12 +726,29 @@ async function publishShare() {
   try {
     const b64u = await encodeReport(payload);
     const url = location.origin + location.pathname + '#d=' + b64u;
+    __lastShareUrl = url; // 存储供"复制分享链接"使用
     history.replaceState(null, '', '#d=' + b64u);
-    let copied = false;
-    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { /* 剪贴板不可用时地址栏已更新 */ }
-    const tip = '已发布 ' + days.length + ' 天的共享数据' + (copied ? '，链接已复制到剪贴板' : '，请复制地址栏网址') + '（同事打开即可按时间段筛选、生成综合报表，无需上传）';
-    showToast(tip);
-  } catch (e) { showToast('发布失败：' + e.message); }
+    // 计算完成：启用复制按钮
+    btnCopy.disabled = false;
+    btnCopy.style.background = '#4f46e5';
+    btnCopy.style.cursor = 'pointer';
+    btnCopy.style.opacity = '1';
+    showToast('✅ 发布计算完成 — 共 ' + days.length + ' 天，点击「复制分享链接」获取链接');
+  } catch (e) {
+    showToast('发布失败：' + e.message);
+  }
+}
+
+// 复制分享链接：直接复制上次计算好的链接，不重新计算
+async function copyShareLink() {
+  if (!__lastShareUrl) { showToast('请先点击「发布计算」生成分享链接'); return; }
+  try {
+    await navigator.clipboard.writeText(__lastShareUrl);
+    showToast('✅ 分享链接已复制到剪贴板');
+  } catch (e) {
+    // 剪贴板不可用时提示手动复制地址栏
+    showToast('链接已生成，请手动复制地址栏网址');
+  }
 }
 
 // 把分享链接里的每日数据载入本机（覆盖同名 shared_ 条目，避免重复打开叠加）
@@ -1149,6 +1177,7 @@ document.getElementById('btnGenAgg').onclick = generateAggregate;
 document.getElementById('btnSelAll').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]:not([disabled])').forEach(c => c.checked = true); updateDaySelCount(); };
 document.getElementById('btnSelNone').onclick = () => { document.querySelectorAll('#dayList input[type=checkbox]').forEach(c => c.checked = false); updateDaySelCount(); };
 document.getElementById('btnExportDay').onclick = exportExcel;
+document.getElementById('btnCopyShare').onclick = copyShareLink;
 } catch (e) { showFatal('按钮绑定失败：' + e.message); }
 
 // ===================== 上传文件选择 =====================
