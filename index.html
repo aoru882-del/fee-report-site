@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30l';  // 分享链接数据强过滤+发布时本地预过滤，彻底清除旧版数据
+const BUILD_ID = '2026-07-30m';  // 修复loadSharedDays过滤bug(rows实为对象数组)+空数据告警
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -790,12 +790,22 @@ async function loadSharedDays(days) {
     .filter(function (d) {
       if (!d || !d.report) return false;
       var r = d.report;
-      // 必须有 rows 和 columns 数组
+      // 必须有 rows 和 columns
       if (!r.rows || !Array.isArray(r.rows) || !r.rows.length) return false;
       if (!r.columns || !Array.isArray(r.columns) || !r.columns.length) return false;
       // 至少有一行数据行（非空行：至少有一个单元格有内容）
+      // 注意：expandReport 后 rows 是对象数组（{列名:值}），compactReport 原始 d 是二维数组
       var hasDataRows = r.rows.some(function (row) {
-        return row && Array.isArray(row) && row.some(function (cell) {
+        if (!row) return false;
+        // 对象形式：检查任意值有内容
+        if (!Array.isArray(row)) {
+          return Object.keys(row).some(function (k) {
+            var cell = row[k];
+            return cell !== null && cell !== undefined && cell !== '' && cell !== '—';
+          });
+        }
+        // 数组形式：检查任意单元格有内容
+        return row.some(function (cell) {
           return cell !== null && cell !== undefined && cell !== '' && cell !== '—';
         });
       });
@@ -820,8 +830,13 @@ async function loadSharedDays(days) {
   if (days.length > __sharedDaysCache.length) {
     console.log('[分享] 过滤掉 ' + (days.length - __sharedDaysCache.length) + ' 条无效/残留记录');
   }
+  if (days.length > 0 && __sharedDaysCache.length === 0) {
+    // 异常情况：原始数据有内容但全被过滤 → 可能是数据格式不兼容，给出明确提示
+    showToast('⚠️ 分享链接中的数据均被识别为无效（旧版格式或数据损坏），请发送方重新点一次「发布计算」生成新链接');
+    console.warn('[分享] 所有 ' + days.length + ' 条记录被过滤，疑似链接数据损坏或格式不兼容');
+  }
   await renderDays();
-  showToast('已加载分享的每日数据（' + __sharedDaysCache.length + ' 天' + (days.length > __sharedDaysCache.length ? '，已过滤 ' + (days.length - __sharedDaysCache.length) + ' 条旧版残留' : '') + '），可勾选时间段生成综合报表');
+  showToast('已加载分享的每日数据（' + __sharedDaysCache.length + ' 天' + (days.length > __sharedDaysCache.length && __sharedDaysCache.length > 0 ? '，已过滤 ' + (days.length - __sharedDaysCache.length) + ' 条旧版残留' : '') + '），可勾选时间段生成综合报表');
 }
 
 // ===================== 美津浓总表独立管理 =====================
