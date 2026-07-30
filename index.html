@@ -373,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29s';  // 计算状态指示器 + 全站调试信息醒目化
+const BUILD_ID = '2026-07-29t';  // 计算状态指示器 + 全站调试信息醒目化
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -416,7 +416,7 @@ function normDateStr(v) {
     const y = v.getFullYear();
     const m = String(v.getMonth() + 1).padStart(2, '0');
     const d = String(v.getDate()).padStart(2, '0');
-    return String(y) + m + d;
+    return String(y + m + d).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
   }
   const s = String(v).trim();
   // Excel 日期序列号（如 45923 = 2025-09-01），范围约 29000~60000
@@ -428,7 +428,7 @@ function normDateStr(v) {
     const y = dt.getFullYear();
     const m = String(dt.getMonth() + 1).padStart(2, '0');
     const d = String(dt.getDate()).padStart(2, '0');
-    return String(y) + m + d;
+    return String(y + m + d).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
   }
   // 提取所有数字段，处理 YYYY-M-D / YYYY/M/D 等格式
   const nums = s.match(/\d+/g);
@@ -436,10 +436,10 @@ function normDateStr(v) {
     const y = nums[0];
     const mm = String(nums[1]).padStart(2, '0');
     const dd = String(nums[2]).padStart(2, '0');
-    return y + mm + dd;
+    return (y + mm + dd).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
   }
   // 兜底：直接拼接所有数字
-  return s.replace(/[^0-9]/g, '');
+  return s.replace(/[^0-9]/g, '').normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
 }
 function isEmpty(v) { return v === '' || v === null || v === undefined; }
 function toNum(v) { if (v === '' || v === null || v === undefined) return v; const n = Number(v); return isNaN(n) ? v : n; }
@@ -482,7 +482,8 @@ function processSection3(rows, section1Time) {
   let skipped = 0;
   for (const r of rows) {
     const d = normDateStr(r[dateCol]);
-    if (target && d !== target) { skipped++; continue; }
+    // 标准化后比较，防止不可见字符导致"看起来一样但不相等"
+    if (target && d !== target && d.normalize() !== target.normalize()) { skipped++; continue; }
     out.push({ 'SPU': toNum(r['SPU ID']), '花费': r['花费'] ?? '', '核心位置点击量': r['核心位置点击量'] ?? '' });
   }
   window.__fs_debug.kept = out.length;
