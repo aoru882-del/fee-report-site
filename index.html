@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30o';  // 发布计算只打包完整三文件记录，legacyReport一律不进分享链接
+const BUILD_ID = '2026-07-30p';  // 分享链接加载时4层强过滤(行数+数值+日期+字段)，彻底杜绝残留
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -795,32 +795,34 @@ async function copyShareLink() {
 
 // 把分享链接里的每日数据载入内存（不写入 IndexedDB，避免污染"上传数据原表"和日期列表）
 async function loadSharedDays(days) {
-  // 强过滤：只保留有实际业务数据的报表
+  // 强过滤：只保留有实际业务数据的报表（多层校验，彻底杜绝残留/空壳/已删除记录）
   __sharedDaysCache = days
     .filter(function (d) {
       if (!d || !d.report) return false;
       var r = d.report;
-      // 必须有 rows 和 columns
+      // ① 必须有 rows 和 columns
       if (!r.rows || !Array.isArray(r.rows) || !r.rows.length) return false;
       if (!r.columns || !Array.isArray(r.columns) || !r.columns.length) return false;
-      // 至少有一行数据行（非空行：至少有一个单元格有内容）
-      // 注意：expandReport 后 rows 是对象数组（{列名:值}），compactReport 原始 d 是二维数组
-      var hasDataRows = r.rows.some(function (row) {
+      // ② 至少有 3 行数据行（正常报表至少有几十行 SPU 数据，残留通常只有 0-2 行）
+      if (r.rows.length < 3) { console.log('[分享过滤] 跳过 ' + (d.date || '?') + ': 仅 ' + r.rows.length + ' 行，疑似残留'); return false; }
+      // ③ 至少有一行包含数值型业务数据（成交金额/推广合计等 > 0）
+      var hasNumericData = r.rows.some(function (row) {
         if (!row) return false;
-        // 对象形式：检查任意值有内容
+        // 对象形式
         if (!Array.isArray(row)) {
           return Object.keys(row).some(function (k) {
-            var cell = row[k];
-            return cell !== null && cell !== undefined && cell !== '' && cell !== '—';
+            var v = Number(row[k]);
+            return !isNaN(v) && v > 0;
           });
         }
-        // 数组形式：检查任意单元格有内容
+        // 数组形式
         return row.some(function (cell) {
-          return cell !== null && cell !== undefined && cell !== '' && cell !== '—';
+          var v = Number(cell);
+          return !isNaN(v) && v > 0;
         });
       });
-      if (!hasDataRows) return false;
-      // 日期必须合法
+      if (!hasNumericData) { console.log('[分享过滤] 跳过 ' + (d.date || '?') + ': 无数值业务数据'); return false; }
+      // ④ 日期必须合法
       if (!d.date || String(d.date).length < 10) return false;
       return true;
     })
