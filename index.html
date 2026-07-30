@@ -373,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30i';  // 核弹级清理：全量扫描+逐条诊断+宽泛删除
+const BUILD_ID = '2026-07-30j';  // 修复启动顺序：migrate后再次清理，彻底清除旧版残留
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -1278,34 +1278,46 @@ async function migrateLegacyData() {
   } catch (e) { console.warn('[迁移] 失败', e); return 0; }
 }
 
-// 核弹级清理：全量扫描 raw_records，逐条诊断，删除任何不完整的记录
+// 核弹级清理：全量扫描 raw_records，逐条诊断，删除任何不完整或重复的记录
 async function cleanupStaleSharedRecords() {
   try {
     const all = await idbGetAll('raw_records');
     if (!all || !all.length) { console.log('[清理] raw_records 为空'); return 0; }
 
     console.log('[清理] === 全量扫描 raw_records（共 ' + all.length + ' 条）===');
+
+    // 先按日期分组，找出每个日期有哪些记录
+    const byDate = {};
+    for (const r of all) {
+      const d = r.date || 'unknown';
+      if (!byDate[d]) byDate[d] = [];
+      byDate[d].push(r);
+    }
+
     const stale = [];
     for (const r of all) {
-      // 打印每条记录的完整关键信息
+      // 打印每条记录的关键信息
+      const hasComplete = !!(r.files && r.files.secA && r.files.secB && r.files.secC);
+      const hasLegacy = !!r.legacyReport;
       const info = {
-        id: r.id,
-        date: r.date,
-        shared: r.shared,
-        hasFiles: !!r.files,
-        secA: !!(r.files && r.files.secA),
-        secB: !!(r.files && r.files.secB),
-        secC: !!(r.files && r.files.secC),
-        hasLegacy: !!r.legacyReport,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt
+        id: r.id, date: r.date, shared: r.shared,
+        secA: !!(r.files && r.files.secA), secB: !!(r.files && r.files.secB), secC: !!(r.files && r.files.secC),
+        hasLegacy: hasLegacy, hasComplete: hasComplete
       };
       console.log('[扫描]', JSON.stringify(info));
 
-      // 判定是否为正常记录：必须有完整三文件 OR 有 legacyReport
-      const hasComplete = !!(r.files && r.files.secA && r.files.secB && r.files.secC);
-      const hasLegacy = !!r.legacyReport;
-      const isNormal = hasComplete || hasLegacy;
+      // 判定是否为正常记录
+      let isNormal = hasComplete || hasLegacy;
+
+      // 额外检查：如果同日期已有完整记录，则只保留 legacy 的旧版记录是多余的
+      if (!hasComplete && hasLegacy) {
+        const siblings = byDate[r.date] || [];
+        const hasCompleteSibling = siblings.some(s => s.id !== r.id && s.files && s.files.secA && s.files.secB && s.files.secC);
+        if (hasCompleteSibling) {
+          console.log('[清理] ★ 同日期已有完整版，删除旧版 legacy:', r.date, r.id);
+          isNormal = false;
+        }
+      }
 
       if (!isNormal) {
         console.log('[清理] ★ 标记删除:', JSON.stringify(info));
@@ -1318,7 +1330,7 @@ async function cleanupStaleSharedRecords() {
     for (const r of stale) {
       await idbDelete('raw_records', r.id);
     }
-    console.log('[清理] ✓ 已删除 ' + stale.length + ' 条异常记录');
+    console.log('[清理] ✓ 已删除 ' + stale.length + ' 条异常/重复记录');
     return stale.length;
   } catch (e) { console.warn('[清理] 失败', e); return 0; }
 }
@@ -1907,10 +1919,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===================== 启动 =====================
 (async () => {
   try { await openDB(); } catch (e) { console.warn('IndexedDB 不可用', e); }
-  // 清理历史版本误写入 raw_records 的分享残留记录
-  try { const n = await cleanupStaleSharedRecords(); if (n > 0) console.log('清理残留分享记录 ' + n + ' 条'); } catch (e) { console.warn('清理残留失败', e); }
-  // 先迁移重构前的旧数据，避免用户已保存的内容"消失"（分享记录不再迁移）
+  // 先迁移重构前的旧数据（可能重新引入残留记录）
   try { const n = await migrateLegacyData(); if (n > 0) console.log('迁移旧数据 ' + n + ' 条'); } catch (e) { console.warn('迁移旧数据失败', e); }
+  // 迁移后再次清理：删除 migrate 引入的异常记录 + 已有的残留
+  try { const n = await cleanupStaleSharedRecords(); if (n > 0) console.log('清理残留 ' + n + ' 条'); } catch (e) { console.warn('清理残留失败', e); }
   // 渲染原始数据记录列表
   if (typeof renderRawRecords === 'function') { try { await renderRawRecords(); } catch (e) { console.warn('renderRawRecords 失败', e); } }
   // 渲染查看综合报表的日期列表
