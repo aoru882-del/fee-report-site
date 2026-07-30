@@ -373,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29u';  // 计算状态指示器 + 全站调试信息醒目化
+const BUILD_ID = '2026-07-30a';  // 分享链接紧凑编码（列名单存+行用数组），缩短约23%
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -678,11 +678,25 @@ function bytesToB64url(bytes) { let bin = ''; const chunk = 0x8000; for (let i =
 function b64urlToBytes(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const bin = atob(s); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return bytes; }
 async function encodeReport(obj) { if (typeof CompressionStream === 'undefined') throw new Error('当前浏览器不支持压缩，请换用较新版本的 Chrome / Edge'); const cs = new CompressionStream('deflate-raw'); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(JSON.stringify(obj))); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return bytesToB64url(new Uint8Array(buf)); }
 async function decodeReport(b64u) { const bytes = b64urlToBytes(b64u); const ds = new DecompressionStream('deflate-raw'); const w = ds.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(ds.readable).arrayBuffer(); return JSON.parse(new TextDecoder().decode(buf)); }
+// 紧凑编码：列名只存一次、行用数组（位置对应列），显著缩短分享链接长度
+function compactReport(obj) {
+  const c = obj.columns || [];
+  const d = (obj.rows || []).map(function (r) { return c.map(function (cc) { return (r[cc] === undefined ? '' : r[cc]); }); });
+  const t = c.map(function (cc) { return (obj.totals ? obj.totals[cc] : ''); });
+  return { v: 1, c: c, d: d, t: t, p: obj.percentColumns || [], m: obj.mizunoMeta || null, k: obj.createdAt || null };
+}
+function expandReport(cp) {
+  if (!cp || !cp.c) return cp; // 旧格式兜底：直接原样返回
+  const c = cp.c;
+  const rows = (cp.d || []).map(function (arr) { const o = {}; c.forEach(function (cc, i) { o[cc] = arr ? arr[i] : ''; }); return o; });
+  const totals = {}; c.forEach(function (cc, i) { totals[cc] = cp.t ? cp.t[i] : ''; });
+  return { columns: c, rows: rows, totals: totals, percentColumns: cp.p || [], mizunoMeta: cp.m || null, createdAt: cp.k };
+}
 function getReportPayload() { return { columns: cols, rows: rows, totals: totals, percentColumns: Array.from(pct), mizunoMeta: viewMizunoMeta, createdAt: viewCreatedAt }; }
 async function shareCurrent() {
   try {
     if (!rows.length) { showToast('当前没有可分享的报表'); return; }
-    const payload = getReportPayload();
+    const payload = compactReport(getReportPayload());
     const b64u = await encodeReport(payload);
     const url = location.origin + location.pathname + '#d=' + b64u;
     history.replaceState(null, '', '#d=' + b64u);
@@ -710,7 +724,7 @@ async function publishShare() {
     }
   }
   if (!days.length) { showToast('没有成功计算的报表数据'); return; }
-  const payload = { type: 'days', days: days, publishedAt: Date.now() };
+  const payload = { type: 'days', days: days.map(function (d) { return { date: d.date, createdAt: d.createdAt, report: compactReport(d.report) }; }), publishedAt: Date.now() };
   try {
     const b64u = await encodeReport(payload);
     const url = location.origin + location.pathname + '#d=' + b64u;
@@ -1832,8 +1846,18 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const rep = await decodeReport(m[1]);
       if (rep && rep.type === 'days' && Array.isArray(rep.days)) {
-        await loadSharedDays(rep.days);
+        const days = rep.days.map(function (d) { return { date: d.date, createdAt: d.createdAt, report: (d.report && d.report.v === 1) ? expandReport(d.report) : d.report }; });
+        await loadSharedDays(days);
+      } else if (rep && rep.v === 1) {
+        const er = expandReport(rep);
+        cols = er.columns; pct = new Set(er.percentColumns || []); rows = JSON.parse(JSON.stringify(er.rows)); totals = er.totals;
+        viewCreatedAt = er.createdAt || Date.now(); viewMizunoMeta = er.mizunoMeta || null;
+        __DATA__.report.formulas = er.formulas || []; __DATA__.report.sectionDetails = er.sectionDetails || [];
+        currentScopeLabel = '他人分享的报表';
+        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
+        showToast('已加载他人分享的报表快照');
       } else if (rep && (rep.columns || rep.rows)) {
+        // 旧格式兜底
         cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
         viewCreatedAt = rep.createdAt || Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
         __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
