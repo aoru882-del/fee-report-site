@@ -372,7 +372,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30b';  // 合并分享按钮：删除"复制分享链接"，只保留"发布分享链接"（对方可勾选日期重算）
+const BUILD_ID = '2026-07-30c';  // 清理分享残留记录：上传数据原表过滤shared_条目+启动时自动清理
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -1612,6 +1612,8 @@ async function deleteRawRecord(id) {
 async function renderRawRecords() {
   let all = [];
   try { all = await idbGetAll('raw_records'); } catch(e) { /* store may not exist yet */ }
+  // 过滤掉分享链接载入的残留记录（shared 标记），只显示用户自己上传的原始文件记录
+  all = all.filter(r => !r.shared);
   all.sort((a,b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
 
   const tbody = document.getElementById('rawRecordsList');
@@ -1809,7 +1811,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===================== 启动 =====================
 (async () => {
   try { await openDB(); } catch (e) { console.warn('IndexedDB 不可用', e); }
-  // 先迁移重构前的旧数据，避免用户已保存的内容“消失”
+  // 清理分享链接载入的残留 shared_ 记录（避免污染"上传数据原表"列表）
+  try { const all = await idbGetAll('raw_records'); const shared = all.filter(r => r.shared); if (shared.length) { for (const s of shared) { try { await idbDelete('raw_records', s.id); } catch(e) {} } console.log('已清理 ' + shared.length + ' 条分享残留记录'); } } catch(e) {}
+  // 先迁移重构前的旧数据，避免用户已保存的内容"消失"
   try { const n = await migrateLegacyData(); if (n > 0) console.log('迁移旧数据 ' + n + ' 条'); } catch (e) { console.warn('迁移旧数据失败', e); }
   // 渲染原始数据记录列表
   if (typeof renderRawRecords === 'function') { try { await renderRawRecords(); } catch (e) { console.warn('renderRawRecords 失败', e); } }
