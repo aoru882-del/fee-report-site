@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30n';  // 一键刷新按钮+确认m版过滤修复已生效
+const BUILD_ID = '2026-07-30o';  // 发布计算只打包完整三文件记录，legacyReport一律不进分享链接
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -740,13 +740,13 @@ async function publishShare() {
 
   const all = await idbGetAll('raw_records');
   if (!all.length) { overlay.classList.remove('show'); showToast('还没有可发布的数据记录，请先在「上传数据原表」中添加'); return; }
-  // 过滤掉不完整的残留记录（避免打包进分享链接）
+  // ★ 只打包有完整三文件的记录（secA+secB+secC），legacyReport/残留一律不打包进分享链接
   var validRecords = all.filter(function (r) {
-    var hasComplete = !!(r.files && r.files.secA && r.files.secB && r.files.secC);
-    var hasLegacy = !!r.legacyReport;
-    return hasComplete || hasLegacy;
+    return !!(r.files && r.files.secA && r.files.secB && r.files.secC);
   });
-  if (!validRecords.length) { overlay.classList.remove('show'); showToast('没有完整的数据记录可发布'); return; }
+  // 统计被排除的记录
+  var skipped = all.length - validRecords.length;
+  if (!validRecords.length) { overlay.classList.remove('show'); showToast('没有完整的原始数据可发布（需上传经营状况明细+非全站营销+全站营销三份文件）'); return; }
   showToast('正在计算全部记录的报表…');
   const days = [];
   for (const rec of validRecords) {
@@ -774,7 +774,7 @@ async function publishShare() {
     btnCopy.style.opacity = '1';
     btnCopy.textContent = '复制分享链接';
     overlay.classList.remove('show');
-    showToast('✅ 计算完成 — 共 ' + days.length + ' 天');
+    showToast('✅ 计算完成 — 共 ' + days.length + ' 天' + (skipped > 0 ? '（已跳过 ' + skipped + ' 条不完整/旧版残留记录）' : ''));
   } catch (e) {
     overlay.classList.remove('show');
     showToast('发布失败：' + e.message);
