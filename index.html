@@ -373,7 +373,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-29t';  // 计算状态指示器 + 全站调试信息醒目化
+const BUILD_ID = '2026-07-29u';  // 计算状态指示器 + 全站调试信息醒目化
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 (function checkCacheVersion() {
@@ -416,19 +416,18 @@ function normDateStr(v) {
     const y = v.getFullYear();
     const m = String(v.getMonth() + 1).padStart(2, '0');
     const d = String(v.getDate()).padStart(2, '0');
-    return String(y + m + d).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
+    return cleanNum(String(y + m + d));
   }
   const s = String(v).trim();
   // Excel 日期序列号（如 45923 = 2025-09-01），范围约 29000~60000
   const n = Number(s);
   if (!isNaN(n) && n > 25000 && n < 70000) {
-    // Excel 序列号转日期（Excel 以 1899-12-30 为基准）
     const epoch = new Date(1899, 11, 30);
     const dt = new Date(epoch.getTime() + Math.round(n) * 86400000);
     const y = dt.getFullYear();
     const m = String(dt.getMonth() + 1).padStart(2, '0');
     const d = String(dt.getDate()).padStart(2, '0');
-    return String(y + m + d).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
+    return cleanNum(String(y + m + d));
   }
   // 提取所有数字段，处理 YYYY-M-D / YYYY/M/D 等格式
   const nums = s.match(/\d+/g);
@@ -436,10 +435,25 @@ function normDateStr(v) {
     const y = nums[0];
     const mm = String(nums[1]).padStart(2, '0');
     const dd = String(nums[2]).padStart(2, '0');
-    return (y + mm + dd).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
+    return cleanNum(y + mm + dd);
   }
   // 兜底：直接拼接所有数字
-  return s.replace(/[^0-9]/g, '').normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
+  return cleanNum(s.replace(/[^0-9]/g, ''));
+}
+// 清洗不可见字符 + 防止日期重复（如 2026072920260729 → 20260729）
+function cleanNum(s) {
+  if (!s) return '';
+  s = String(s).normalize().replace(/[\u200B-\u200D\uFEFF\u00A0\u200E-\u200F\u2060-\u2064]/g, '');
+  // 如果结果是纯数字且长度 > 8（YYYYMMDD），检查是否为 8 位模式重复，取前 8 位
+  if (/^\d+$/.test(s) && s.length > 8) {
+    const first8 = s.slice(0, 8);
+    // 验证前 8 位是否像有效日期 YYYYMMDD（年份>=1900）
+    const y = parseInt(first8.slice(0, 4), 10);
+    if (y >= 1900 && y <= 2100) {
+      return first8;
+    }
+  }
+  return s;
 }
 function isEmpty(v) { return v === '' || v === null || v === undefined; }
 function toNum(v) { if (v === '' || v === null || v === undefined) return v; const n = Number(v); return isNaN(n) ? v : n; }
@@ -475,7 +489,7 @@ function processSection3(rows, section1Time) {
     totalRows: rows.length,
     dateCol: dateCol,
     headers: rows.length > 0 ? Object.keys(rows[0]) : [],
-    sampleDates: rows.slice(0, 3).map(r => ({ raw: r[dateCol], rawType: typeof r[dateCol], norm: normDateStr(r[dateCol]), normLen: normDateStr(r[dateCol]).length, targetLen: String(target).length })),
+    sampleDates: rows.slice(0, 3).map(r => ({ raw: r[dateCol], rawType: typeof r[dateCol], rawLen: String(r[dateCol]||'').length, norm: normDateStr(r[dateCol]), normLen: normDateStr(r[dateCol]).length, targetLen: String(target).length })),
     firstCompare: { row0_norm: firstRowNorm, target: target, equal: (firstRowNorm === target), row0_norm_hex: encodeURIComponent(firstRowNorm), target_hex: encodeURIComponent(target) }
   };
   const out = [];
