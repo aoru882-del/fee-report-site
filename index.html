@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31l';  // 分享链路彻底修复：本地+分享数据按日期去重合并，同事端正常显示可用
+const BUILD_ID = '2026-07-31m';  // 分享链路根治：解码提前到renderDays之前+完整日志+错误提示
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -2223,8 +2223,55 @@ document.addEventListener('DOMContentLoaded', () => {
   try { const n = await purgeSharedAndLegacyResiduals(); if (n > 0) console.log('清除本地残留 ' + n + ' 条'); } catch (e) { console.warn('清除本地残留失败', e); }
   // 渲染原始数据记录列表
   if (typeof renderRawRecords === 'function') { try { await renderRawRecords(); } catch (e) { console.warn('renderRawRecords 失败', e); } }
-  // 渲染查看综合报表的日期列表
+  // 渲染查看综合报表的日期列表（此时分享数据还未加载，可能为空；后面 loadSharedDays 会再次渲染）
   if (typeof renderDays === 'function') { try { await renderDays(); } catch (e) { console.warn('renderDays 失败', e); } }
+
+  // ★★★ 先处理分享链接（在最终渲染之前），确保 __sharedDaysCache 填充后再渲染 ★★★
+  var shareLoadError = null;
+  const hashMatch = location.hash.match(/[#&]d=([^&]+)/);
+  if (hashMatch) {
+    try {
+      console.log('[分享] 检测到 #d= 分享链接，开始解码…');
+      const rep = await decodeReport(hashMatch[1]);
+      console.log('[分享] 解码结果:', rep ? ('type=' + rep.type + ', days=' + (Array.isArray(rep.days) ? rep.days.length : 'N/A')) : 'null');
+      if (rep && rep.type === 'days' && Array.isArray(rep.days) && rep.days.length > 0) {
+        const days = rep.days.map(function (d) { return { date: d.date, createdAt: d.createdAt, report: (d.report && d.report.v === 1) ? expandReport(d.report) : d.report }; });
+        console.log('[分享] 展开后共 ' + days.length + ' 天数据，调用 loadSharedDays…');
+        await loadSharedDays(days);
+        console.log('[分享] ✓ loadSharedDays 完成，缓存=' + __sharedDaysCache.length + '条，重新渲染列表');
+        // ★ 再次渲染，这次 __sharedDaysCache 已填充
+        try { await renderDays(); } catch (e) { console.warn('分享数据渲染失败', e); }
+      } else if (rep && rep.v === 1) {
+        const er = expandReport(rep);
+        cols = er.columns; pct = new Set(er.percentColumns || []); rows = JSON.parse(JSON.stringify(er.rows)); totals = er.totals;
+        viewCreatedAt = er.createdAt || Date.now(); viewMizunoMeta = er.mizunoMeta || null;
+        __DATA__.report.formulas = er.formulas || []; __DATA__.report.sectionDetails = er.sectionDetails || [];
+        currentScopeLabel = '他人分享的报表';
+        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
+        showToast('已加载他人分享的报表快照');
+      } else if (rep && (rep.columns || rep.rows)) {
+        cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
+        viewCreatedAt = rep.createdAt || Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
+        __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
+        currentScopeLabel = '他人分享的报表';
+        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
+        showToast('已加载他人分享的报表快照');
+      } else {
+        shareLoadError = '分享链接数据格式不识别(type=' + (rep ? rep.type : 'null') + ')';
+        console.warn('[分享]', shareLoadError, rep);
+      }
+    } catch (e) {
+      shareLoadError = e.message;
+      console.error('[分享] 解码异常:', e);
+    }
+    // ★ 无论成功失败都给明确反馈
+    if (shareLoadError) {
+      showToast('⚠️ 分享链接加载失败：' + shareLoadError + '。请确认链接完整或让发送方重新生成。');
+    } else if (__sharedDaysCache.length === 0 && hashMatch) {
+      showToast('⚠️ 分享链接中的数据未通过校验（可能格式不兼容），请让发送方重新点「发布计算」生成新链接');
+    }
+  }
+
   // 渲染美津浓状态
   if (typeof renderMizunoStatus === 'function') { try { await renderMizunoStatus(); await refreshMizunoRef(); } catch (e) { console.warn('renderMizunoStatus 失败', e); } }
   // 报表结果区折叠
@@ -2235,33 +2282,6 @@ document.addEventListener('DOMContentLoaded', () => {
     body.style.display = hidden ? '' : 'none';
     at.textContent = hidden ? '收起 ▲' : '展开 ▼';
   };
-  // 打开带 #d= 的分享链接时，自动解码并渲染他人报表
-  const m = location.hash.match(/[#&]d=([^&]+)/);
-  if (m) {
-    try {
-      const rep = await decodeReport(m[1]);
-      if (rep && rep.type === 'days' && Array.isArray(rep.days)) {
-        const days = rep.days.map(function (d) { return { date: d.date, createdAt: d.createdAt, report: (d.report && d.report.v === 1) ? expandReport(d.report) : d.report }; });
-        await loadSharedDays(days);
-      } else if (rep && rep.v === 1) {
-        const er = expandReport(rep);
-        cols = er.columns; pct = new Set(er.percentColumns || []); rows = JSON.parse(JSON.stringify(er.rows)); totals = er.totals;
-        viewCreatedAt = er.createdAt || Date.now(); viewMizunoMeta = er.mizunoMeta || null;
-        __DATA__.report.formulas = er.formulas || []; __DATA__.report.sectionDetails = er.sectionDetails || [];
-        currentScopeLabel = '他人分享的报表';
-        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
-        showToast('已加载他人分享的报表快照');
-      } else if (rep && (rep.columns || rep.rows)) {
-        // 旧格式兜底
-        cols = rep.columns; pct = new Set(rep.percentColumns || []); rows = JSON.parse(JSON.stringify(rep.rows)); totals = rep.totals;
-        viewCreatedAt = rep.createdAt || Date.now(); viewMizunoMeta = rep.mizunoMeta || null;
-        __DATA__.report.formulas = rep.formulas || []; __DATA__.report.sectionDetails = rep.sectionDetails || [];
-        currentScopeLabel = '他人分享的报表';
-        renderAggResult({ columns: cols, rows: rows, percentColumns: Array.from(pct), totals: totals, formulas: __DATA__.report.formulas, sectionDetails: __DATA__.report.sectionDetails, mizunoMeta: viewMizunoMeta }, currentScopeLabel);
-        showToast('已加载他人分享的报表快照');
-      }
-    } catch (e) { showToast('分享链接解析失败：' + e.message); }
-  }
   // 页脚版本标记，便于核对是否加载到最新版
   const footer = document.getElementById('appFooter');
   if (footer) footer.textContent = '综合费率报表中心 2.0 · 版本 ' + BUILD_ID;
