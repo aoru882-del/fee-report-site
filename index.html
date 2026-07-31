@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31m';  // 分享链路根治：解码提前到renderDays之前+完整日志+错误提示
+const BUILD_ID = '2026-07-31n';  // 分享链路根治v2:b64url解码容错+版本强制刷新(有#d=必刷新)+完整错误诊断
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -398,18 +398,19 @@ const BUILD_ID = '2026-07-31m';  // 分享链路根治：解码提前到renderDa
   try {
     const u = new URL(location.href);
     const v = u.searchParams.get('v');
-    if (v && v !== BUILD_ID) {
-      // 自动跳转：用当前版本号 + 时间戳强制破坏缓存
+    const hasShareLink = !!location.hash.match(/[#&]d=/);
+    // ★ 条件1：?v= 参数与 BUILD_ID 不匹配 → 强制刷新
+    // ★ 条件2：有分享链接(#d=)但没有版本参数或版本可能过旧 → 也强制刷新（确保同事拿到最新解码逻辑）
+    const needsReload = (v && v !== BUILD_ID) || (hasShareLink && v !== BUILD_ID);
+    if (needsReload) {
       var freshUrl = new URL(location.href);
       freshUrl.searchParams.set('v', BUILD_ID);
       freshUrl.searchParams.set('_t', Date.now());
-      // 保留 hash（分享数据）
       freshUrl.hash = location.hash;
-      // 延迟跳转，让用户看到提示
       document.addEventListener('DOMContentLoaded', function () {
         var bar = document.createElement('div');
         bar.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999999;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center';
-        bar.innerHTML = '<div style="background:#fff;padding:30px 40px;border-radius:12px;text-align:center;max-width:400px"><div style="font-size:24px;margin-bottom:12px">🔄</div><div style="font-size:15px;color:#333;margin-bottom:16px;font-weight:600">正在加载最新版本…</div><div style="font-size:13px;color:#888">' + v + ' → ' + BUILD_ID + '</div></div>';
+        bar.innerHTML = '<div style="background:#fff;padding:30px 40px;border-radius:12px;text-align:center;max-width:400px"><div style="font-size:24px;margin-bottom:12px">🔄</div><div style="font-size:15px;color:#333;margin-bottom:16px;font-weight:600">正在加载最新版本…</div><div style="font-size:13px;color:#888">' + (v || '无版本') + ' → ' + BUILD_ID + (hasShareLink ? ' [含分享链接]' : '') + '</div></div>';
         document.body.appendChild(bar);
         setTimeout(function () { location.href = freshUrl.toString(); }, 800);
       });
@@ -703,9 +704,39 @@ function hideCalcStatus() { const bar = document.getElementById('calcStatusBar')
 
 // ===================== 分享链接（压缩内嵌 #d=） =====================
 function bytesToB64url(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-function b64urlToBytes(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const bin = atob(s); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return bytes; }
+function b64urlToBytes(s) {
+  // ★ 容错：清理输入中的非法字符，避免 atob 抛 "not correctly encoded"
+  if (!s || typeof s !== 'string') throw new Error('分享数据为空');
+  // 只保留 base64 合法字符（标准 + url-safe）
+  var cleaned = s.replace(/[^A-Za-z0-9+/=_-]/g, '');
+  if (cleaned.length < s.length) console.warn('[b64url] 清除了 ' + (s.length - cleaned.length) + ' 个非法字符, 原长=' + s.length + ', 清理后=' + cleaned.length);
+  if (cleaned.length === 0) throw new Error('分享数据为空字符串（可能链接被截断）');
+  s = cleaned.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  try { var bin = atob(s); } catch (e) {
+    // 给出诊断信息帮助排查
+    var info = '长度=' + s.length + ', 前20字符=' + s.substring(0, 20) + '..., 尾20字符=' + s.substring(s.length - 20);
+    throw new Error('Base64解码失败(' + e.message + '). ' + info + '. 链接可能在复制/传输过程中被截断或损坏，请让发送方重新生成。');
+  }
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
 async function encodeReport(obj) { if (typeof CompressionStream === 'undefined') throw new Error('当前浏览器不支持压缩，请换用较新版本的 Chrome / Edge'); const cs = new CompressionStream('deflate-raw'); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(JSON.stringify(obj))); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return bytesToB64url(new Uint8Array(buf)); }
-async function decodeReport(b64u) { const bytes = b64urlToBytes(b64u); const ds = new DecompressionStream('deflate-raw'); const w = ds.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(ds.readable).arrayBuffer(); return JSON.parse(new TextDecoder().decode(buf)); }
+async function decodeReport(b64u) {
+  try {
+    const bytes = b64urlToBytes(b64u);
+    const ds = new DecompressionStream('deflate-raw');
+    const w = ds.writable.getWriter();
+    w.write(bytes); w.close();
+    const buf = await new Response(ds.readable).arrayBuffer();
+    return JSON.parse(new TextDecoder().decode(buf));
+  } catch (e) {
+    // 包装错误，保留原始原因
+    if (e.message.indexOf('Base64') >= 0 || e.message.indexOf('分享') >= 0) throw e;
+    throw new Error('分享数据解压失败: ' + e.message);
+  }
+}
 // 紧凑编码：列名只存一次、行用数组（位置对应列），显著缩短分享链接长度
 function compactReport(obj) {
   const c = obj.columns || [];
@@ -773,6 +804,8 @@ async function publishShare() {
   try {
     const b64u = await encodeReport(payload);
     const url = location.origin + location.pathname + '#d=' + b64u;
+    console.log('[分享] 链接生成完成: 总长度=' + url.length + '字符 (#d=部分=' + b64u.length + '字符), 数据天数=' + days.length);
+    if (url.length > 150000) console.warn('[分享] ⚠️ 链接超过150KB，某些浏览器/聊天工具可能截断！建议减少天数后重新发布');
     __lastShareUrl = url; // 存储供"复制分享链接"使用
     history.replaceState(null, '', '#d=' + b64u);
     // ★ 清空内存中的分享缓存：发布新链接后，当前页面只显示本地原始数据，
