@@ -208,6 +208,7 @@
   <header>
     <h1>综合费率报表中心 2.0</h1>
     <span class="pill" id="updated"></span>
+    <span class="pill" id="rowCount"></span>
   </header>
   <nav>
     <a href="javascript:void(0)" class="active" data-view="calc">上传数据原表</a>
@@ -389,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31e';  // 修复updateDaySelCount空指针导致筛选功能中断
+const BUILD_ID = '2026-07-31f';  // 修复108个null错误(rowCount缺失)+筛选弹窗按当前表格重渲染(单天/综合)
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -726,6 +727,8 @@ var __lastShareUrl = null;
 
 // 分享数据纯内存缓存（不写入 IndexedDB，避免污染原始记录列表）
 var __sharedDaysCache = [];
+// 当前激活的报表表格：'single' = 单天报表(reportTable)，'agg' = 综合报表(aggReportTable)
+var currentTableView = 'single';
 
 // 查看综合报表：日期范围筛选状态（null=未选, 第一次点=start, 第二次点=end）
 var __dayFilterRange = { start: null, end: null };
@@ -1150,6 +1153,7 @@ function clearDayFilter() {
 
 // ===================== 渲染 =====================
 function render() {
+  currentTableView = 'single';
   const table = document.getElementById('reportTable');
   if (table) table.remove();
   const tbl = document.createElement('table');
@@ -1205,7 +1209,8 @@ function render() {
   tfoot.appendChild(ftr); tbl.appendChild(tfoot);
   const summaryEl = document.getElementById('summary');
   if (summaryEl) summaryEl.textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行，' + cols.length + ' 列') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行，' + cols.length + ' 列');
-  document.getElementById('rowCount').textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行');
+  const rc = document.getElementById('rowCount');
+  if (rc) rc.textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行');
   const wrap = document.getElementById('tableWrap');
   if (wrap) wrap.appendChild(tbl);
   applySavedHeight();
@@ -1278,16 +1283,16 @@ function closeFilter() { document.getElementById('filterPop').style.display = 'n
 const fpTextEl = document.getElementById('fpText'); if (fpTextEl) fpTextEl.addEventListener('input', filterFpVals);
 function filterFpVals() { const text = document.getElementById('fpText').value.trim().toLowerCase(); document.querySelectorAll('#fpVals label').forEach(lbl => { const inp = lbl.querySelector('input[type=checkbox]'); const v = (inp.getAttribute('data-v') || '').toLowerCase(); lbl.style.display = (!text || v.includes(text)) ? '' : 'none'; }); }
 document.getElementById('fpSelToggle').onclick = () => { const boxes = Array.from(document.querySelectorAll('#fpVals input[type=checkbox]')); if (!boxes.length) return; const allChecked = boxes.every(c => c.checked); boxes.forEach(c => c.checked = !allChecked); const btn = document.getElementById('fpSelToggle'); btn.textContent = allChecked ? '全选' : '取消全选'; };
-document.getElementById('fpSortAsc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: 1 }; render(); closeFilter(); showToast('已按「' + fpCol + '」升序'); } };
-document.getElementById('fpSortDesc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: -1 }; render(); closeFilter(); showToast('已按「' + fpCol + '」降序'); } };
-document.getElementById('fpClear').onclick = () => { if (fpCol) { delete filters[fpCol]; render(); closeFilter(); showToast('已清除「' + fpCol + '」筛选'); } };
+document.getElementById('fpSortAsc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: 1 }; renderCurrent(); closeFilter(); showToast('已按「' + fpCol + '」升序'); } };
+document.getElementById('fpSortDesc').onclick = () => { if (fpCol) { sortState = { col: fpCol, dir: -1 }; renderCurrent(); closeFilter(); showToast('已按「' + fpCol + '」降序'); } };
+document.getElementById('fpClear').onclick = () => { if (fpCol) { delete filters[fpCol]; renderCurrent(); closeFilter(); showToast('已清除「' + fpCol + '」筛选'); } };
 document.getElementById('fpApply').onclick = () => {
   if (!fpCol) return;
   const set = new Set();
   document.querySelectorAll('#fpVals input[type=checkbox]:checked').forEach(c => set.add(c.getAttribute('data-v')));
   const text = document.getElementById('fpText').value.trim();
   if (set.size === 0 && !text) delete filters[fpCol]; else filters[fpCol] = { text, values: set };
-  render(); closeFilter(); showToast('已应用「' + fpCol + '」筛选');
+  renderCurrent(); closeFilter(); showToast('已应用「' + fpCol + '」筛选');
 };
 document.addEventListener('click', (e) => { const pop = document.getElementById('filterPop'); if (pop.style.display === 'block' && !pop.contains(e.target) && !(e.target.classList && e.target.classList.contains('filterBtn'))) closeFilter(); });
 
@@ -1321,7 +1326,8 @@ function renderInfo(rep, createdAt, label) {
   rep = rep || __DATA__.report;
   const cap = (label || '报表') + '：' + new Date(createdAt || __DATA__.createdAt).toLocaleString('zh-CN');
   document.getElementById('updated').textContent = cap;
-  document.getElementById('rowCount').textContent = '共 ' + (rep.rows ? rep.rows.length : 0) + ' 行';
+  const rc2 = document.getElementById('rowCount');
+  if (rc2) rc2.textContent = '共 ' + (rep.rows ? rep.rows.length : 0) + ' 行';
   const fm = rep.formulas || [];
   document.getElementById('formulas').innerHTML = fm.map(f => '<div style="margin-bottom:6px"><code class="fm">' + esc(f.formula) + '</code> ' + esc(f.desc) + '</div>').join('') || '<span class="meta">无</span>';
   const sd = rep.sectionDetails || [];
@@ -1964,9 +1970,11 @@ async function computeReportFromRawRecord(rec) {
 
 // 在 viewDays 中渲染报表结果表格
 function renderAggResult(rep, scopeLabel) {
+  currentTableView = 'agg';
   const card = document.getElementById('aggResultCard');
   card.style.display = '';
-  document.getElementById('aggResultTitle').textContent = scopeLabel || '综合费率报表';
+  const art = document.getElementById('aggResultTitle');
+  if (art) art.textContent = scopeLabel || '综合费率报表';
 
   // 用全局状态渲染到 aggTableWrap
   const wrap = document.getElementById('aggTableWrap');
@@ -2065,7 +2073,8 @@ function renderAggResult(rep, scopeLabel) {
   tfoot.appendChild(ftr); table.appendChild(tfoot);
   wrap.appendChild(table);
 
-  document.getElementById('aggSummary').textContent = '共 ' + rows.length + ' 行 · ' + cols.length + ' 列';
+  const ags = document.getElementById('aggSummary');
+  if (ags) ags.textContent = '共 ' + rows.length + ' 行 · ' + cols.length + ' 列';
 
   // 显示导出按钮
   document.getElementById('btnExportDay').style.display = '';
@@ -2080,6 +2089,69 @@ function setupColResizeForAgg() {
   tbl.querySelectorAll('.resize-handle').forEach(h => h.addEventListener('mousedown', startResize));
   tbl.querySelectorAll('.filterBtn').forEach(btn => { btn.onclick = (e) => { e.stopPropagation(); openFilter(btn.closest('th')); }; });
 }
+
+// 仅根据当前全局 rows/cols/filters/sortState 重建综合报表表格（筛选/排序后调用，不再重新计算）
+function renderAggTable() {
+  const wrap = document.getElementById('aggTableWrap');
+  if (!wrap) return;
+  const view = getViewRows();
+  const table = document.createElement('table');
+  table.className = 'report-table'; table.id = 'aggReportTable';
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  cols.forEach(col => {
+    const th = document.createElement('th');
+    th.setAttribute('data-col', col);
+    const align = colAlign[col]; if (align) th.style.textAlign = align;
+    const w = colWidths[col]; if (w) th.style.width = w + 'px';
+    th.innerHTML = '<span class="th-text">' + esc(col) + '</span><span class="filterBtn" title="筛选/排序/对齐">▾</span><span class="resize-handle"></span>';
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  view.forEach(r => {
+    const tr = document.createElement('tr');
+    cols.forEach(col => {
+      const td = document.createElement('td');
+      const align = colAlign[col]; if (align) td.style.textAlign = align;
+      td.textContent = fmt(r[col], col);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  const tfoot = document.createElement('tfoot');
+  const ftr = document.createElement('tr');
+  let sumDeal = 0, sumPromo = 0;
+  for (const r of view) { sumDeal += Number(r['成交金额']) || 0; sumPromo += Number(r['推广合计']) || 0; }
+  const totalDeal = Math.round(sumDeal * 100) / 100;
+  const totalPromo = Math.round(sumPromo * 100) / 100;
+  const totalRate = sumDeal > 0 ? Math.round(totalPromo / sumDeal * 10000) / 10000 : '';
+  cols.forEach(c => {
+    const td = document.createElement('td');
+    if (colAlign[c]) td.style.textAlign = colAlign[c];
+    if (c === '成交金额' || c === '推广合计' || c === '综合费率') td.style.background = '#eef6ff';
+    if (c === 'SPU') td.textContent = '合计';
+    else if (c === '成交金额') td.textContent = totalDeal;
+    else if (c === '推广合计') td.textContent = totalPromo;
+    else if (c === '综合费率') td.textContent = totalRate !== '' ? (totalRate * 100).toFixed(2) + '%' : '';
+    else td.textContent = '';
+    ftr.appendChild(td);
+  });
+  tfoot.appendChild(ftr); table.appendChild(tfoot);
+  wrap.innerHTML = '';
+  wrap.appendChild(table);
+  const ags = document.getElementById('aggSummary');
+  if (ags) ags.textContent = (view.length === rows.length) ? ('共 ' + rows.length + ' 行 · ' + cols.length + ' 列') : ('筛选后 ' + view.length + ' 行 / 共 ' + rows.length + ' 行 · ' + cols.length + ' 列');
+  setupColResizeForAgg();
+}
+
+// 根据当前激活的表格类型，调用对应的重渲染函数（筛选/排序/清除后统一入口）
+function renderCurrent() {
+  if (currentTableView === 'agg') renderAggTable();
+  else render();
+}
+
 
 // 报表结果区折叠/展开
 document.addEventListener('DOMContentLoaded', () => {
