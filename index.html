@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31g';  // 筛选弹窗下边界溢出自动翻转到表头上方
+const BUILD_ID = '2026-07-31h';  // 启动清理：物理删除本地"来自分享/旧版"残留记录
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -1512,6 +1512,29 @@ function isStaleRecord(r) {
   const hasLegacy = !!r.legacyReport;
   return !(hasComplete || hasLegacy);
 }
+// ★ 启动清理：物理删除本地库中"来自分享"与"旧版"残留记录
+//   这类记录不该持久化在本地库——"来自分享"数据本就只走内存缓存(__sharedDaysCache)，
+//   由 #d= 分享链接重新打开时自动重建；"旧版"记录无源文件、无法重算，纯属历史脏数据。
+async function purgeSharedAndLegacyResiduals() {
+  let removed = 0;
+  for (const store of ['raw_records', 'days']) {
+    try {
+      const all = await idbGetAll(store);
+      if (!all || !all.length) continue;
+      for (const r of all) {
+        const isSharedResidual = r.shared === true;                 // 来自分享的持久化残留
+        const isLegacyResidual = !r.files && !!r.legacyReport;       // 旧版：无源文件、仅有历史报表
+        if (isSharedResidual || isLegacyResidual) {
+          console.log('[清理] ✓ 删除本地残留记录:', store, (r.date || '?'), (r.id || '?'), isSharedResidual ? '(来自分享)' : '(旧版)');
+          await idbDelete(store, r.id);
+          removed++;
+        }
+      }
+    } catch (e) { console.warn('[清理]', store, '扫描失败', e); }
+  }
+  if (removed) console.log('[清理] ✓ 共物理删除 ' + removed + ' 条本地残留记录');
+  return removed;
+}
 async function persistFiles() {
   try {
     const data = { savedAt: Date.now(), files: {} };
@@ -2176,6 +2199,8 @@ document.addEventListener('DOMContentLoaded', () => {
   try { const n = await migrateLegacyData(); if (n > 0) console.log('迁移旧数据 ' + n + ' 条'); } catch (e) { console.warn('迁移旧数据失败', e); }
   // 迁移后再次清理：删除 migrate 引入的异常记录 + 已有的残留
   try { const n = await cleanupStaleSharedRecords(); if (n > 0) console.log('清理残留 ' + n + ' 条'); } catch (e) { console.warn('清理残留失败', e); }
+  // ★ 物理删除本地"来自分享/旧版"残留记录（这些本就不该持久化）
+  try { const n = await purgeSharedAndLegacyResiduals(); if (n > 0) console.log('清除本地残留 ' + n + ' 条'); } catch (e) { console.warn('清除本地残留失败', e); }
   // 渲染原始数据记录列表
   if (typeof renderRawRecords === 'function') { try { await renderRawRecords(); } catch (e) { console.warn('renderRawRecords 失败', e); } }
   // 渲染查看综合报表的日期列表
