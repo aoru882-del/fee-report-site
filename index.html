@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-30q';  // 版本不匹配自动跳转+渲染层最终封死不可用记录
+const BUILD_ID = '2026-07-31a';  // 日期筛选器改为时间段范围选择，范围外记录隐藏
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -727,6 +727,9 @@ var __lastShareUrl = null;
 // 分享数据纯内存缓存（不写入 IndexedDB，避免污染原始记录列表）
 var __sharedDaysCache = [];
 
+// 查看综合报表：日期范围筛选状态（null=未选, 第一次点=start, 第二次点=end）
+var __dayFilterRange = { start: null, end: null };
+
 // 发布计算：从所有原始记录计算报表后打包进链接（每日期一份，对方打开后可勾选日期段重算）
 async function publishShare() {
   const btnCopy = document.getElementById('btnCopyShare');
@@ -976,6 +979,10 @@ function renderDPMonth(y, m, selStr, id) {
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const today = new Date();
   const todayStr = fmtYMD(today);
+  // 范围选择状态（仅 dpDays）
+  const isRangeMode = (id === 'dpDays');
+  const rangeStart = isRangeMode ? __dayFilterRange.start : null;
+  const rangeEnd = isRangeMode ? __dayFilterRange.end : null;
   let html = '<div class="dp-month"><div class="dp-mh">'
     + '<button onclick="dpShiftMonth(-1,\'' + id + '\')">◀</button>'
     + y + '年' + String(m + 1).padStart(2, '0') + '月'
@@ -990,9 +997,20 @@ function renderDPMonth(y, m, selStr, id) {
   // 本月
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = fmtYMD(new Date(y, m, d));
-    const isSel = ds === selStr;
     const isToday = ds === todayStr;
-    html += '<button class="dp-day' + (isSel ? ' dp-sel' : '') + (isToday && !isSel ? ' dp-today' : '') + '" data-d="' + ds + '" onclick="dpPickDay(\'' + ds + '\',\'' + id + '\')" style="position:relative">' + d + '</button>';
+    // 范围选中判断
+    let inRange = false, isStart = false, isEnd = false;
+    if (isRangeMode && rangeStart) {
+      isStart = (ds === rangeStart);
+      isEnd = (ds === rangeEnd);
+      inRange = isStart || isEnd || (rangeEnd && ds > rangeStart && ds < rangeEnd);
+    }
+    const isSel = (!isRangeMode && ds === selStr);
+    let cls = 'dp-day';
+    if (isSel) cls += ' dp-sel';
+    else if (inRange) cls += ' dp-sel';
+    if (isToday && !isSel && !inRange) cls += ' dp-today';
+    html += '<button class="' + cls + '" data-d="' + ds + '" onclick="dpPickDay(\'' + ds + '\',\'' + id + '\')" style="position:relative">' + d + '</button>';
   }
   // 下月补位
   const totalCells = startWD + daysInMonth;
@@ -1025,16 +1043,44 @@ function dpClickTab(el, idx, id) {
 
 function dpPickDay(ds, id) {
   const isCalc = id === 'dpCalc';
-  const hidden = document.getElementById(isCalc ? 'dayDate' : 'dayFilterDate');
-  hidden.value = ds;
-  document.getElementById(isCalc ? 'dpCalcLabel' : 'dpDaysLabel').textContent = ds;
-  // 关闭面板
-  document.getElementById(id).classList.remove('open');
-  dpState.openId = null;
-  // 刷新日历以显示选中态
+  if (isCalc) {
+    // 上传数据原表：单日期选择（原有逻辑不变）
+    const hidden = document.getElementById('dayDate');
+    hidden.value = ds;
+    document.getElementById('dpCalcLabel').textContent = ds;
+    document.getElementById(id).classList.remove('open');
+    dpState.openId = null;
+    renderDPCalendar(id);
+    return;
+  }
+  // ===== 查看综合报表：时间段范围选择 =====
+  if (!__dayFilterRange.start) {
+    // 第一次点击 → 设为开始日期
+    __dayFilterRange.start = ds;
+    __dayFilterRange.end = null;
+    document.getElementById('dpDaysLabel').textContent = ds + ' 起…（再选结束日）';
+  } else if (!__dayFilterRange.end) {
+    // 第二次点击 → 设为结束日期
+    if (ds < __dayFilterRange.start) {
+      // 如果选的比开始早，交换
+      __dayFilterRange.end = __dayFilterRange.start;
+      __dayFilterRange.start = ds;
+    } else {
+      __dayFilterRange.end = ds;
+    }
+    document.getElementById('dpDaysLabel').textContent = __dayFilterRange.start + ' ~ ' + __dayFilterRange.end;
+    // 关闭面板
+    document.getElementById(id).classList.remove('open');
+    dpState.openId = null;
+  } else {
+    // 已有完整范围，重新开始选
+    __dayFilterRange.start = ds;
+    __dayFilterRange.end = null;
+    document.getElementById('dpDaysLabel').textContent = ds + ' 起…（再选结束日）';
+  }
   renderDPCalendar(id);
-  // 如果是查看综合报表的筛选器，触发筛选
-  if (!isCalc) filterDaysByDate(ds);
+  // 触发筛选
+  applyDayFilter();
 }
 
 function setDPValue(id, val) {
@@ -1044,25 +1090,49 @@ function setDPValue(id, val) {
   document.getElementById(isCalc ? 'dpCalcLabel' : 'dpDaysLabel').textContent = val || (isCalc ? '请选择日期' : '全部日期');
 }
 
-// 查看综合报表：按日期筛选每日数据
-async function filterDaysByDate(ds) {
-  await renderDays();
-  // 高亮匹配日期，取消不匹配的勾选
+// 查看综合报表：按日期范围筛选每日数据（范围内显示，范围外隐藏）
+function applyDayFilter() {
   const items = document.querySelectorAll('#dayList .day-item');
+  const hasRange = __dayFilterRange.start && __dayFilterRange.end;
+  let visibleCount = 0;
   items.forEach(item => {
-    const cb = item.querySelector('input[type=checkbox]');
     const dateEl = item.querySelector('.day-name');
-    if (dateEl && dateEl.textContent.trim() !== ds) {
-      if (cb) cb.checked = false;
-      item.style.opacity = '0.35';
+    if (!dateEl) return;
+    // 提取日期文本（去掉"分享""旧版"等标签）
+    const dateText = dateEl.childNodes[0] ? dateEl.childNodes[0].textContent.trim() : dateEl.textContent.trim();
+    if (hasRange) {
+      const inRange = (dateText >= __dayFilterRange.start && dateText <= __dayFilterRange.end);
+      item.style.display = inRange ? '' : 'none';
+      if (inRange) { item.style.opacity = ''; visibleCount++; }
+      // 取消勾选隐藏项的 checkbox
+      if (!inRange) {
+        const cb = item.querySelector('input[type=checkbox]');
+        if (cb) cb.checked = false;
+      }
     } else {
+      item.style.display = '';
       item.style.opacity = '';
+      visibleCount++;
     }
   });
   updateDaySelCount();
+  // 更新计数
+  const badge = document.getElementById('dayCount');
+  if (badge) badge.textContent = visibleCount;
+}
+
+// 兼容旧调用（单日期筛选 → 转为范围）
+async function filterDaysByDate(ds) {
+  await renderDays();
+  __dayFilterRange.start = ds;
+  __dayFilterRange.end = ds;
+  document.getElementById('dpDaysLabel').textContent = ds;
+  applyDayFilter();
 }
 
 function clearDayFilter() {
+  __dayFilterRange.start = null;
+  __dayFilterRange.end = null;
   setDPValue('dpDays', '');
   renderDays();
 }
@@ -1570,6 +1640,10 @@ async function renderDays() {
   }).join('');
   el.querySelectorAll('input[type=checkbox]:not([disabled])').forEach(c => c.addEventListener('change', updateDaySelCount));
   updateDaySelCount();
+  // 如果有活跃的日期范围筛选，自动应用
+  if (__dayFilterRange.start || __dayFilterRange.end) {
+    applyDayFilter();
+  }
 }
 function updateDaySelCount() { const n = document.querySelectorAll('#dayList input[type=checkbox]:checked').length; document.getElementById('daySelCount').textContent = '已选 ' + n + ' 天'; }
 async function loadDayReportById(id) { const d = await idbGet('days', id); if (d) loadDayReport(d); }
