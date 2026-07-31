@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31j';  // 分享数据用sharedReport字段区分legacyReport，渲染层彻底拦截旧版残留显示
+const BUILD_ID = '2026-07-31k';  // 彻底重构：有本地数据时完全忽略分享缓存，旧版数据永不显示
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -1650,8 +1650,12 @@ async function renderDays() {
   if (!Array.isArray(all)) all = [];
   // 兜底过滤：隐藏残留/异常记录
   all = all.filter(r => !isStaleRecord(r));
-  // 合并内存中的分享数据（对方打开链接后可见）
-  var merged = all.concat(__sharedDaysCache);
+
+  // ★ 核心规则：当本地有数据时，完全不显示分享缓存
+  //   - 用户自己有上传的文件 → 只看自己的 raw_records，忽略分享链接带来的旧数据
+  //   - 同事打开分享链接（本地无数据）→ 靠 __sharedDaysCache 显示
+  var hasLocalData = all.length > 0;
+  var merged = hasLocalData ? all : all.concat(__sharedDaysCache);
   merged.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
 
   const el = document.getElementById('dayList');
@@ -1664,32 +1668,24 @@ async function renderDays() {
   if (!merged.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
 
   el.innerHTML = merged.filter(function(rec) {
-    // ★ 最终安全网：渲染前再过滤一次
-    //    显示条件：有完整文件 OR 有 legacyReport（本地旧版迁移） OR 有 sharedReport（正常分享数据）
-    //    ★ 不再显示：无文件且无任何报表数据的空壳记录
+    // ★ 只显示有完整文件的记录 或 分享数据（仅当无本地数据时）
     var fa = rec.files ? rec.files.secA : null;
     var fb = rec.files ? rec.files.secB : null;
     var fc = rec.files ? rec.files.secC : null;
     var hasAll = !!(fa && fb && fc);
-    var isLegacy = !rec.files && !!rec.legacyReport;       // 本地旧版残留（将被 purge 清理）
-    var isSharedData = !rec.files && !!rec.sharedReport;     // 正常分享数据（从 #d= 链接解码）
-    if (!hasAll && !isLegacy && !isSharedData) {
-      console.log('[renderDays] 隐藏不可用记录:', rec.date, rec.id);
-      return false;
-    }
-    // ★ 旧版残留(legacyReport)在此处拦截不显示——这类数据只应被 purge 物理删除，不应出现在列表中
-    if (isLegacy) {
-      console.log('[renderDays] ★ 拦截旧版残留记录（应在启动时被清理）:', rec.date, rec.id);
-      return false;
-    }
-    return true;
+    // 有完整源文件 → 显示
+    if (hasAll) return true;
+    // 无本地数据时的分享缓存 → 显示
+    if (!hasLocalData && (rec.sharedReport || rec.legacyReport)) return true;
+    // 其他情况一律不显示（旧版残留、空壳等）
+    console.log('[renderDays] 隐藏:', rec.date, rec.id, '(无完整文件 + 有本地数据或无可报表)');
+    return false;
   }).map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
-    const isLegacy = !rec.files && !!rec.legacyReport;        // 不会出现（上面已过滤）
-    const isSharedData = !rec.files && !!rec.sharedReport;      // 正常分享数据
-    const isShared = !!rec.shared;
     const hasAll = !!(fa && fb && fc);
-    const usable = hasAll || isSharedData || isLegacy;
+    const isSharedData = !hasLocalData && !rec.files && !!rec.sharedReport;
+    const isLegacy = !hasLocalData && !rec.files && !!rec.legacyReport;
+    const usable = true; // 过滤后剩下的都是可用的
     const badge = isSharedData
       ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">分享</span>'
       : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">旧版</span>' : '');
@@ -1766,8 +1762,9 @@ async function generateAggregate() {
   if (!checked.length) { showToast('请至少勾选一天'); return; }
 
   const all = await idbGetAll('raw_records');
-  // 合并内存中的分享数据，使对方打开分享链接后勾选日期能正确计算
-  var merged = all.concat(__sharedDaysCache);
+  // ★ 与 renderDays 一致：有本地数据时不合并分享缓存，避免旧版数据混入计算
+  var hasLocalData = all.length > 0;
+  var merged = hasLocalData ? all : all.concat(__sharedDaysCache);
   const sel = merged.filter(r => checked.includes(r.id)).sort((a, b) => a.date < b.date ? -1 : 1);
   if (!sel.length) { showToast('未找到选中的数据记录'); return; }
 
