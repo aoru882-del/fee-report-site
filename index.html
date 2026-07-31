@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31a';  // 日期筛选器改为时间段范围选择，范围外记录隐藏
+const BUILD_ID = '2026-07-31b';  // 时间段筛选：范围外disable checkbox，全选/计算只处理范围内记录
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -1104,15 +1104,23 @@ function applyDayFilter() {
       const inRange = (dateText >= __dayFilterRange.start && dateText <= __dayFilterRange.end);
       item.style.display = inRange ? '' : 'none';
       if (inRange) { item.style.opacity = ''; visibleCount++; }
-      // 取消勾选隐藏项的 checkbox
-      if (!inRange) {
-        const cb = item.querySelector('input[type=checkbox]');
-        if (cb) cb.checked = false;
+      // 范围外：取消勾选 + 禁用 checkbox（防止全选误选、计算误入）
+      const cb = item.querySelector('input[type=checkbox]');
+      if (cb) {
+        if (!inRange) {
+          cb.checked = false;
+          cb.disabled = true;
+        } else {
+          cb.disabled = false;
+        }
       }
     } else {
       item.style.display = '';
       item.style.opacity = '';
       visibleCount++;
+      // 清除筛选时恢复所有 checkbox
+      const cb = item.querySelector('input[type=checkbox]');
+      if (cb) cb.disabled = false;
     }
   });
   updateDaySelCount();
@@ -1645,7 +1653,7 @@ async function renderDays() {
     applyDayFilter();
   }
 }
-function updateDaySelCount() { const n = document.querySelectorAll('#dayList input[type=checkbox]:checked').length; document.getElementById('daySelCount').textContent = '已选 ' + n + ' 天'; }
+function updateDaySelCount() { const n = document.querySelectorAll('#dayList input[type=checkbox]:checked:not([disabled])').length; document.getElementById('daySelCount').textContent = '已选 ' + n + ' 天'; }
 async function loadDayReportById(id) { const d = await idbGet('days', id); if (d) loadDayReport(d); }
 function loadDayReport(d) {
   const rep = d.report;
@@ -1699,7 +1707,7 @@ function aggregateReports(sel) {
   return { columns: SECTION1_ORDER, rows: outRows, percentColumns: ['综合费率'], totals, formulas, sectionDetails, scopeLabel };
 }
 async function generateAggregate() {
-  const checked = Array.from(document.querySelectorAll('#dayList input[type=checkbox]:checked')).map(c => c.value);
+  const checked = Array.from(document.querySelectorAll('#dayList input[type=checkbox]:checked:not([disabled])')).map(c => c.value);
   if (!checked.length) { showToast('请至少勾选一天'); return; }
 
   const all = await idbGetAll('raw_records');
