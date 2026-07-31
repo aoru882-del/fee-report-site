@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31h';  // 启动清理：物理删除本地"来自分享/旧版"残留记录
+const BUILD_ID = '2026-07-31i';  // 发布分享链接后清空内存分享缓存+刷新列表，避免旧链接残留显示
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -774,6 +774,11 @@ async function publishShare() {
     const url = location.origin + location.pathname + '#d=' + b64u;
     __lastShareUrl = url; // 存储供"复制分享链接"使用
     history.replaceState(null, '', '#d=' + b64u);
+    // ★ 清空内存中的分享缓存：发布新链接后，当前页面只显示本地原始数据，
+    //   避免旧链接注入的 __sharedDaysCache 残留继续显示在列表里
+    __sharedDaysCache = [];
+    const banner2 = document.getElementById('sharedBanner');
+    if (banner2) banner2.style.display = 'none';
     // 计算完成：启用复制按钮（紫色），关闭弹窗
     btnCopy.disabled = false;
     btnCopy.style.background = '#4f46e5';
@@ -781,6 +786,7 @@ async function publishShare() {
     btnCopy.style.opacity = '1';
     btnCopy.textContent = '复制分享链接';
     overlay.classList.remove('show');
+    try { await renderDays(); } catch (e) { console.warn('发布后刷新列表失败', e); }
     showToast('✅ 计算完成 — 共 ' + days.length + ' 天' + (skipped > 0 ? '（已跳过 ' + skipped + ' 条不完整/旧版残留记录）' : ''));
   } catch (e) {
     overlay.classList.remove('show');
