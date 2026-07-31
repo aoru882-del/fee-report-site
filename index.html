@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31i';  // 发布分享链接后清空内存分享缓存+刷新列表，避免旧链接残留显示
+const BUILD_ID = '2026-07-31j';  // 分享数据用sharedReport字段区分legacyReport，渲染层彻底拦截旧版残留显示
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -760,7 +760,8 @@ async function publishShare() {
     try {
       let rep;
       if (rec.files && rec.files.secA) rep = await computeReportFromRawRecord(rec);
-      else if (rec.legacyReport) rep = rec.legacyReport;
+      else if (rec.sharedReport) rep = rec.sharedReport;       // 分享数据
+      else if (rec.legacyReport) rep = rec.legacyReport;       // 旧版（validRecords 不应走到这里）
       else { console.warn('跳过 ' + rec.date + '：无可用数据'); continue; }
       days.push({ date: rec.date, createdAt: rec.createdAt, report: rep });
     } catch (e) {
@@ -846,7 +847,7 @@ async function loadSharedDays(days) {
         createdAt: d.createdAt || Date.now(),
         updatedAt: d.createdAt || Date.now(),
         files: null,
-        legacyReport: d.report,
+        sharedReport: d.report,   // ★ 独立字段：区分"正常分享数据"与"旧版残留(legacyReport)"
         shared: true
       };
     });
@@ -1663,27 +1664,38 @@ async function renderDays() {
   if (!merged.length) { el.innerHTML = '<div class="day-empty">还没有任何数据记录。请先在「上传数据原表」中添加日期和原表文件。</div>'; return; }
 
   el.innerHTML = merged.filter(function(rec) {
-    // ★ 最终安全网：渲染前再过滤一次，任何无可用数据的记录不显示
+    // ★ 最终安全网：渲染前再过滤一次
+    //    显示条件：有完整文件 OR 有 legacyReport（本地旧版迁移） OR 有 sharedReport（正常分享数据）
+    //    ★ 不再显示：无文件且无任何报表数据的空壳记录
     var fa = rec.files ? rec.files.secA : null;
     var fb = rec.files ? rec.files.secB : null;
     var fc = rec.files ? rec.files.secC : null;
     var hasAll = !!(fa && fb && fc);
-    var isLegacy = !rec.files && !!rec.legacyReport;
-    if (!hasAll && !isLegacy) {
+    var isLegacy = !rec.files && !!rec.legacyReport;       // 本地旧版残留（将被 purge 清理）
+    var isSharedData = !rec.files && !!rec.sharedReport;     // 正常分享数据（从 #d= 链接解码）
+    if (!hasAll && !isLegacy && !isSharedData) {
       console.log('[renderDays] 隐藏不可用记录:', rec.date, rec.id);
+      return false;
+    }
+    // ★ 旧版残留(legacyReport)在此处拦截不显示——这类数据只应被 purge 物理删除，不应出现在列表中
+    if (isLegacy) {
+      console.log('[renderDays] ★ 拦截旧版残留记录（应在启动时被清理）:', rec.date, rec.id);
       return false;
     }
     return true;
   }).map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
-    const isLegacy = !rec.files && rec.legacyReport;
+    const isLegacy = !rec.files && !!rec.legacyReport;        // 不会出现（上面已过滤）
+    const isSharedData = !rec.files && !!rec.sharedReport;      // 正常分享数据
     const isShared = !!rec.shared;
     const hasAll = !!(fa && fb && fc);
-    const usable = hasAll || !!rec.legacyReport; // 有完整文件或有历史报表都可选
-    const badge = rec.shared ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">分享</span>' : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">旧版</span>' : '');
+    const usable = hasAll || isSharedData || isLegacy;
+    const badge = isSharedData
+      ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">分享</span>'
+      : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:0 6px;font-size:11px;margin-left:4px">旧版</span>' : '');
     const fileInfo = hasAll
       ? ((fa ? '✓ 经营状况明细报表' : '✗ 缺经营状况明细报表') + ' · ' + (fc ? '✓ 非全站营销' : '✗ 缺非全站营销') + ' · ' + (fb ? '✓ 全站营销' : '✗ 缺全站营销'))
-      : (isLegacy ? '旧版数据（含已算好的报表，可直接生成综合报表）' : '文件不完整');
+      : (isSharedData ? '来自分享的报表数据（可直接生成综合报表）' : (isLegacy ? '旧版数据（含已算好的报表，可直接生成综合报表）' : '文件不完整'));
     return '<div class="day-item"><input type="checkbox" value="' + rec.id + '"' + (usable ? '' : ' disabled title="该日期无可用的数据"') + '><div class="day-info"><div class="day-name">' + esc(rec.date) + badge + '</div><div class="day-sub">' +
       fileInfo +
       ' · 更新于 ' + new Date(rec.updatedAt || rec.createdAt).toLocaleString('zh-CN') +
@@ -1762,11 +1774,12 @@ async function generateAggregate() {
   try {
     showCalcStatus('calculating', '⏳ 正在计算综合报表，请稍候…');
 
-    // 取得单条记录的计算结果：有原始文件则实时计算，否则使用迁移/分享带来的 legacyReport
+    // 取得单条记录的计算结果：有原始文件则实时计算，否则使用分享数据(sharedReport)或旧版迁移(legacyReport)
     async function reportOf(rec) {
       if (rec.files && rec.files.secA) return await computeReportFromRawRecord(rec);
-      if (rec.legacyReport) return rec.legacyReport;
-      throw new Error(rec.date + ' 缺少原始文件且无可用的历史报表');
+      if (rec.sharedReport) return rec.sharedReport;       // 正常分享数据
+      if (rec.legacyReport) return rec.legacyReport;       // 旧版迁移（将被 purge 清理）
+      throw new Error(rec.date + ' 缺少原始文件且无可用的报表数据');
     }
 
     if (sel.length === 1) {
@@ -1955,8 +1968,11 @@ async function renderRawRecords() {
 
   tbody.innerHTML = all.map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
-    const isLegacy = !rec.files && rec.legacyReport;
-    const badge = rec.shared ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:0 5px;font-size:10px">分享</span>' : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:0 5px;font-size:10px">旧版</span>' : '');
+    const isLegacy = !rec.files && !!rec.legacyReport;
+    const isSharedData = !rec.files && !!rec.sharedReport;
+    const badge = isSharedData
+      ? ' <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:0 5px;font-size:10px">分享</span>'
+      : (isLegacy ? ' <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:0 5px;font-size:10px">旧版</span>' : '');
     // 时间：取 updatedAt，格式 HH:mm
     const timeStr = new Date(rec.updatedAt || rec.createdAt).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
     const fileCell = (f, label, recId) => {
