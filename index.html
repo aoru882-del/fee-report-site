@@ -389,7 +389,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31d';  // 时间段日历：选完起止才关闭+点击外部中途不关
+const BUILD_ID = '2026-07-31e';  // 修复updateDaySelCount空指针导致筛选功能中断
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -1656,7 +1656,7 @@ async function renderDays() {
     applyDayFilter();
   }
 }
-function updateDaySelCount() { const n = document.querySelectorAll('#dayList input[type=checkbox]:checked:not([disabled])').length; document.getElementById('daySelCount').textContent = '已选 ' + n + ' 天'; }
+function updateDaySelCount() { const el = document.getElementById('daySelCount'); if (!el) return; const n = document.querySelectorAll('#dayList input[type=checkbox]:checked:not([disabled])').length; el.textContent = '已选 ' + n + ' 天'; }
 async function loadDayReportById(id) { const d = await idbGet('days', id); if (d) loadDayReport(d); }
 function loadDayReport(d) {
   const rep = d.report;
