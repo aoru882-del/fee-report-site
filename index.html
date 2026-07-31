@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31f';  // 修复108个null错误(rowCount缺失)+筛选弹窗按当前表格重渲染(单天/综合)
+const BUILD_ID = '2026-07-31g';  // 筛选弹窗下边界溢出自动翻转到表头上方
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -1277,6 +1277,11 @@ function openFilter(th) {
   let left = r.right, top = r.bottom + 4;
   if (left + 280 > window.innerWidth) left = window.innerWidth - 290;
   pop.style.left = Math.max(8, left) + 'px';
+  /* 下边界溢出检测：弹窗超出视口则翻到表头上方 */
+  const popH = pop.offsetHeight || 420;
+  if (top + popH > window.innerHeight - 12) {
+    top = r.top - popH - 4;
+  }
   pop.style.top = Math.max(8, top) + 'px';
 }
 function closeFilter() { document.getElementById('filterPop').style.display = 'none'; fpCol = null; }
