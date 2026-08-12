@@ -390,7 +390,7 @@ function ensureXlsx() {
 }
 
 // ===================== 版本标记（用于确认浏览器是否加载到最新版） =====================
-const BUILD_ID = '2026-07-31n';  // 分享链路根治v2:b64url解码容错+版本强制刷新(有#d=必刷新)+完整错误诊断
+const BUILD_ID = '2026-08-12a';  // 全量null防护: renderMizunoStatus/refreshMizunoRef/renderInfo/renderHistory/renderRawRecords/updateRecSlotUI/showRecordForm
 
 // 缓存一致性检查：若通过 ?v= 打开但版本不符，提示用户硬刷新
 // 版本检测：如果链接要求的版本和实际代码不一致，自动强制跳转到最新版（破缓存）
@@ -937,6 +937,7 @@ async function deleteMizunoStored() {
 
 async function renderMizunoStatus() {
   const el = document.getElementById('mizunoStatus');
+  if (!el) return;
   const rec = await idbGet('files', 'mizuno_persist');
   if (!rec) { el.innerHTML = '<span style="color:#9ca3af">尚未存储任何文件。请上传并点「保存」。</span>'; return; }
   el.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px"><div style="font-weight:500;color:#166534">' + esc(rec.name) + '</div><div style="margin-top:4px;font-size:12px;color:#4b5563">大小：' + (rec.size / 1024).toFixed(1) + ' KB · 存储时间：' + new Date(rec.savedAt).toLocaleString('zh-CN') + '</div></div>';
@@ -946,6 +947,7 @@ async function refreshMizunoRef() {
   const rec = await idbGet('files', 'mizuno_persist');
   const hint = document.getElementById('mizunoRefHint');
   const nameBox = document.getElementById('mizunoRefName');
+  if (!hint) return;
   if (rec) {
     hint.innerHTML = 'xlsx · 可选 · <b style="color:var(--green)">已存储：' + esc(rec.name) + '</b> · 算报表时自动使用 → <a id="mzGoManage" href="javascript:void(0)" style="color:var(--brand);text-decoration:underline">去管理</a>';
     nameBox.querySelector('span').textContent = rec.name;
@@ -1374,9 +1376,11 @@ function renderInfo(rep, createdAt, label) {
   const rc2 = document.getElementById('rowCount');
   if (rc2) rc2.textContent = '共 ' + (rep.rows ? rep.rows.length : 0) + ' 行';
   const fm = rep.formulas || [];
-  document.getElementById('formulas').innerHTML = fm.map(f => '<div style="margin-bottom:6px"><code class="fm">' + esc(f.formula) + '</code> ' + esc(f.desc) + '</div>').join('') || '<span class="meta">无</span>';
+  const fmEl = document.getElementById('formulas');
+  if (fmEl) fmEl.innerHTML = fm.map(f => '<div style="margin-bottom:6px"><code class="fm">' + esc(f.formula) + '</code> ' + esc(f.desc) + '</div>').join('') || '<span class="meta">无</span>';
   const sd = rep.sectionDetails || [];
-  document.getElementById('sectionDetails').innerHTML = sd.map(s => {
+  const sdEl = document.getElementById('sectionDetails');
+  if (sdEl) sdEl.innerHTML = sd.map(s => {
     const rowsHtml = (s.rows || []).slice(0, 50).map(r => '<tr>' + s.columns.map(c => '<td>' + esc(r[c]) + '</td>').join('') + '</tr>').join('');
     return '<div class="sec-detail" style="margin-bottom:14px"><div style="font-weight:500;margin-bottom:4px">' + esc(s.name) + '</div><div class="meta" style="margin-bottom:6px">' + esc(s.rule) + '</div><div style="overflow:auto"><table><thead><tr>' + s.columns.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' + (s.rowCount > 50 ? '<div class="meta">…仅显示前 50 / ' + s.rowCount + ' 行</div>' : '') + '</div>';
   }).join('') || '<span class="meta">无</span>';
@@ -1611,6 +1615,7 @@ async function saveSnapshot() {
 async function renderHistory() {
   const list = (await idbGetAll('snapshots')).sort((a, b) => b.createdAt - a.createdAt);
   const el = document.getElementById('snapList');
+  if (!el) return;
   const badge = document.getElementById('snapCount');
   if (list.length) { badge.style.display = ''; badge.textContent = list.length; } else { badge.style.display = 'none'; }
   if (!list.length) { el.innerHTML = '<div class="snap-empty">还没有保存的报表。在「上传计算」里算好报表后，点「保存为我的报表」即可在此留存。</div>'; return; }
@@ -1868,6 +1873,7 @@ function showRecordForm(editId) {
   recTempFiles = { secA: null, secB: null, secC: null };
   ['A','B','C'].forEach(k => {
     const slot = document.getElementById('recSlot' + k);
+    if (!slot) return;
     slot.className = 'rec-file-slot';
     slot.innerHTML = '<span class="rec-file-hint">点击选择 ' + (k==='A'?'xlsx':'csv') + ' 文件</span>';
     document.getElementById('recSec' + k).value = '';
@@ -1902,6 +1908,7 @@ function onRecPickFile(key, input) {
 function updateRecSlotUI(key, f) {
   const map = { secA:'A', secB:'B', secC:'C' };
   const slot = document.getElementById('recSlot' + map[key]);
+  if (!slot) return;
   if (f) {
     slot.className = 'rec-file-slot ready';
     slot.innerHTML = '<span class="rec-file-name">' + esc(f.name) + '</span><span class="rec-file-size">' + (f.size / 1024).toFixed(1) + ' KB</span><span style="color:#9ca3af;font-size:11px;cursor:pointer;margin-left:6px" onclick="event.stopPropagation();clearRecFile(\'' + key + '\')">✕</span>';
@@ -1987,15 +1994,16 @@ async function renderRawRecords() {
   const tbody = document.getElementById('rawRecordsList');
   const emptyTip = document.getElementById('rawEmptyTip');
   const countEl = document.getElementById('rawCount');
+  if (!tbody) return;
 
-  countEl.textContent = all.length ? ('共 ' + all.length + ' 条记录') : '';
+  if (countEl) countEl.textContent = all.length ? ('共 ' + all.length + ' 条记录') : '';
 
   if (!all.length) {
     tbody.innerHTML = '';
-    emptyTip.style.display = '';
+    if (emptyTip) emptyTip.style.display = '';
     return;
   }
-  emptyTip.style.display = 'none';
+  if (emptyTip) emptyTip.style.display = 'none';
 
   tbody.innerHTML = all.map(rec => {
     const fa = rec.files ? rec.files.secA : null, fb = rec.files ? rec.files.secB : null, fc = rec.files ? rec.files.secC : null;
